@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.brand-primary-bg,
+button.brand-primary-bg,
+a.brand-primary-bg {
+  background-color: var(--brand-primary, #0f172a) !important;
+  color: #ffffff !important;
+}
+
+.brand-primary-bg:hover,
+button.brand-primary-bg:hover,
+a.brand-primary-bg:hover {
+  background-color: var(--brand-primary-hover, #334155) !important;
+  color: #ffffff !important;
+}
+
+.brand-accent-bg,
+button.brand-accent-bg,
+a.brand-accent-bg {
+  background-color: var(--brand-accent, #2563eb) !important;
+  color: #ffffff !important;
+}
+
+.brand-accent-bg:hover,
+button.brand-accent-bg:hover,
+a.brand-accent-bg:hover {
+  background-color: var(--brand-accent-hover, #1d4ed8) !important;
+  color: #ffffff !important;
+}
+
+.brand-primary-text {
+  color: var(--brand-primary, #0f172a) !important;
+}
+
+.brand-accent-text {
+  color: var(--brand-accent, #2563eb) !important;
+}
+
+.brand-accent-border {
+  border-color: var(--brand-accent, #2563eb) !important;
+}
