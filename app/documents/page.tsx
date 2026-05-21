@@ -120,6 +120,43 @@ export default function DocumentsPage() {
     fetchDocuments();
   }, [profile?.company_id]);
 
+  async function openSecureDocument(
+    documentId: number,
+    mode: "view" | "download"
+  ) {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        alert("Your session has expired. Please log in again.");
+        return;
+      }
+
+      const response = await fetch(
+        `/api/documents/${documentId}/signed-url?mode=${mode}`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.signedUrl) {
+        alert(result.error || "Could not open document.");
+        return;
+      }
+
+      window.open(result.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      console.error(error);
+      alert("Unexpected error opening document.");
+    }
+  }
+
   async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
@@ -235,34 +272,36 @@ export default function DocumentsPage() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <select
-              value={documentType}
-              onChange={(e) => setDocumentType(e.target.value)}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm"
-            >
-              {DOCUMENT_TYPES.map((type) => (
-                <option key={type}>{type}</option>
-              ))}
-            </select>
+                    <WriteAccessGuard>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <select
+                value={documentType}
+                onChange={(e) => setDocumentType(e.target.value)}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm"
+              >
+                {DOCUMENT_TYPES.map((type) => (
+                  <option key={type}>{type}</option>
+                ))}
+              </select>
 
-            <label
-              className="cursor-pointer rounded-xl px-5 py-3 text-center text-sm font-semibold text-white shadow-sm"
-              style={{ backgroundColor: "var(--brand-primary)" }}
-            >
-              {uploading ? "Uploading..." : "+ Upload Unlinked Document"}
+              <label
+                className="cursor-pointer rounded-xl px-5 py-3 text-center text-sm font-semibold text-white shadow-sm"
+                style={{ backgroundColor: "var(--brand-primary)" }}
+              >
+                {uploading ? "Uploading..." : "+ Upload Unlinked Document"}
 
-              <input
-                type="file"
-                className="hidden"
-                disabled={uploading}
-                onChange={async (e) => {
-                  await handleUpload(e);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </div>
+                <input
+                  type="file"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={async (e) => {
+                    await handleUpload(e);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+          </WriteAccessGuard>
         </div>
 
         <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-7">
@@ -492,25 +531,28 @@ export default function DocumentsPage() {
 
                         <td className="px-6 py-5">
                           <div className="flex justify-end gap-2">
-                            {doc.file_url && (
-                              <a
-                                href={doc.file_url}
-                                target="_blank"
-                                rel="noreferrer"
+                                                        {doc.file_url && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openSecureDocument(doc.id, "view")
+                                }
                                 className="rounded-xl bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-200"
                               >
                                 View
-                              </a>
+                              </button>
                             )}
 
                             {doc.file_url && (
-                              <a
-                                href={doc.file_url}
-                                download
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openSecureDocument(doc.id, "download")
+                                }
                                 className="rounded-xl bg-green-100 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-200"
                               >
                                 Download
-                              </a>
+                              </button>
                             )}
                           </div>
                         </td>
