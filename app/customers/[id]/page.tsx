@@ -1,5 +1,5 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -439,8 +439,9 @@ export default function CustomerDetailPage() {
     );
   }
 
-  return (
-    <DashboardLayout>
+return (
+  <DashboardLayout>
+    <PageAccessGuard module="customers">
       <div className="space-y-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -919,6 +920,8 @@ export default function CustomerDetailPage() {
           </div>
         </div>
       </div>
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

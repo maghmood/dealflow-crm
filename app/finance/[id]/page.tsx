@@ -1,5 +1,5 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -345,8 +345,9 @@ if (!canAccessRole(profile?.role, "finance")) {
   );
 }
 
-  return (
-    <DashboardLayout>
+return (
+  <DashboardLayout>
+    <PageAccessGuard module="finance">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <Link href="/finance" className="text-sm text-slate-500">
@@ -658,6 +659,8 @@ if (!canAccessRole(profile?.role, "finance")) {
           )}
         </div>
       </div>
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

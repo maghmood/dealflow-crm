@@ -1,5 +1,5 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -743,8 +743,9 @@ function exportSalespersonCsv() {
     );
   }
 
-  return (
-    <DashboardLayout>
+ return (
+  <DashboardLayout>
+    <PageAccessGuard module="reports">
       <div className="space-y-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -1349,6 +1350,7 @@ function exportSalespersonCsv() {
     }
   }
 `}</style>
+    </PageAccessGuard>
 
     </DashboardLayout>
   );

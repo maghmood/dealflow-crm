@@ -1,5 +1,6 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
+import WriteAccessGuard from "@/components/WriteAccessGuard";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -222,7 +223,8 @@ export default function DocumentsPage() {
   const vehicleDocsCount = documents.filter((d) => d.vehicle_id).length;
 
   return (
-    <DashboardLayout>
+  <DashboardLayout>
+    <PageAccessGuard module="documents">
       <div className="space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -532,6 +534,8 @@ export default function DocumentsPage() {
           )}
         </div>
       </div>
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

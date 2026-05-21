@@ -1,11 +1,13 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
+import ReadOnlyNotice from "@/components/ReadOnlyNotice";
+import WriteAccessGuard from "@/components/WriteAccessGuard";
 
 type SalesUser = {
   id: number;
@@ -857,8 +859,10 @@ export default function LeadDetailPage() {
 
   const linkedVehicleTitle = formatVehicleTitle(linkedVehicle);
 
-  return (
-    <DashboardLayout>
+ return (
+  <DashboardLayout>
+    <PageAccessGuard module="leadDetail">
+      <ReadOnlyNotice />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <div className="rounded-xl bg-white p-6 shadow">
@@ -1909,6 +1913,8 @@ export default function LeadDetailPage() {
           </div>
         </div>
       )}
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

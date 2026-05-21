@@ -1,5 +1,5 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -632,8 +632,9 @@ async function createDealFromVehicle() {
     );
   }
 
-  return (
-    <DashboardLayout>
+return (
+  <DashboardLayout>
+    <PageAccessGuard module="inventory">
       <div className="space-y-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -999,6 +1000,8 @@ async function createDealFromVehicle() {
           )}
         </div>
       </div>
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

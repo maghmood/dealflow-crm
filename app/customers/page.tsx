@@ -1,5 +1,5 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -133,7 +133,8 @@ export default function CustomersPage() {
   );
 
   return (
-    <DashboardLayout>
+  <DashboardLayout>
+    <PageAccessGuard module="customers">
       <div className="space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -433,6 +434,9 @@ export default function CustomersPage() {
           )}
         </div>
       </div>
+
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

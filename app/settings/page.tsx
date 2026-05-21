@@ -1,12 +1,13 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabaseClient";
 
 import { canAccessRole } from "@/lib/auth";
 import { useAuth } from "@/components/AuthProvider";
-
+import ReadOnlyNotice from "@/components/ReadOnlyNotice";
+import WriteAccessGuard from "@/components/WriteAccessGuard";
 type Company = {
   id: number;
   company_name: string | null;
@@ -162,7 +163,9 @@ if (!canAccessRole(profile?.role, "settings")) {
 }
 
   return (
-    <DashboardLayout>
+  <DashboardLayout>
+    <PageAccessGuard module="settings">
+<ReadOnlyNotice />
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-slate-800">Settings</h1>
         <p className="text-slate-500">
@@ -226,7 +229,8 @@ if (!canAccessRole(profile?.role, "settings")) {
                   </select>
                 </div>
 
-                <button
+                <WriteAccessGuard>
+<button
                   onClick={saveSettings}
                   className="rounded-lg px-5 py-3 text-white"
                   style={{
@@ -236,7 +240,7 @@ if (!canAccessRole(profile?.role, "settings")) {
                   }}
                 >
                   Save Settings
-                </button>
+                </button></WriteAccessGuard>
               </div>
             )}
           </div>
@@ -284,6 +288,8 @@ if (!canAccessRole(profile?.role, "settings")) {
           </div>
         </div>
       </div>
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

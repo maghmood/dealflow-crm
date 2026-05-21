@@ -1,11 +1,12 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
-import { canAccessRole } from "@/lib/auth";
 import { useAuth } from "@/components/AuthProvider";
+import ReadOnlyNotice from "@/components/ReadOnlyNotice";
+import WriteAccessGuard from "@/components/WriteAccessGuard";
 
 type FinanceApplication = {
   id: number;
@@ -146,24 +147,11 @@ const filteredApplications = applications
     return Number(b.id) - Number(a.id);
   });
 
-if (!canAccessRole(profile?.role, "finance")) {
-  return (
-    <DashboardLayout>
-      <div className="rounded-xl bg-white p-10 shadow">
-        <h1 className="text-2xl font-bold text-slate-800">
-          Access Denied
-        </h1>
 
-        <p className="mt-3 text-slate-500">
-          You do not have permission to access Finance.
-        </p>
-      </div>
-    </DashboardLayout>
-  );
-}
 
   return (
-    <DashboardLayout>
+  <DashboardLayout>
+    <PageAccessGuard module="finance">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-800">
@@ -348,37 +336,42 @@ if (!canAccessRole(profile?.role, "finance")) {
             </div>
 
             <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <WriteAccessGuard>
+
               <button
                 onClick={() => setSelectedApp(null)}
                 className="rounded-lg border border-slate-300 px-4 py-2"
               >
                 Cancel
-              </button>
+              </button></WriteAccessGuard>
+              <WriteAccessGuard>
 
               <button
                 onClick={() => updateFinanceStatus("Submitted")}
                 className="rounded-lg bg-orange-100 px-4 py-2 text-orange-700 hover:bg-orange-200"
               >
                 Pending
-              </button>
+              </button></WriteAccessGuard>
 
-              <button
+              <WriteAccessGuard><button
                 onClick={() => updateFinanceStatus("Declined")}
                 className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
               >
                 Decline
-              </button>
+              </button></WriteAccessGuard>
 
-              <button
+              <WriteAccessGuard><button
                 onClick={() => updateFinanceStatus("Approved")}
                 className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700"
               >
                 Approve
-              </button>
+              </button></WriteAccessGuard>
             </div>
           </div>
         </div>
       )}
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

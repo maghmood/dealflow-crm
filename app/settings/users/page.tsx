@@ -1,10 +1,12 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
 import { canAccessRole } from "@/lib/auth";
+import ReadOnlyNotice from "@/components/ReadOnlyNotice";
+import WriteAccessGuard from "@/components/WriteAccessGuard";
 
 type UserProfile = {
   id: number;
@@ -138,8 +140,10 @@ async function handleInviteUser() {
   }
 }
 
-  return (
-    <DashboardLayout>
+ return (
+  <DashboardLayout>
+    <PageAccessGuard module="userManagement">
+      <ReadOnlyNotice />
       <div className="mb-6 flex items-center justify-between">
   <div>
     <h1 className="text-3xl font-bold text-slate-800">
@@ -150,12 +154,13 @@ async function handleInviteUser() {
     </p>
   </div>
 
-  <button
+  <WriteAccessGuard>
+<button
     onClick={() => setShowInviteModal(true)}
     className="rounded-lg bg-slate-900 px-5 py-3 text-white hover:bg-slate-700"
   >
     + Invite User
-  </button>
+  </button></WriteAccessGuard>
 </div>
 
       <div className="overflow-hidden rounded-xl bg-white shadow">
@@ -301,23 +306,26 @@ async function handleInviteUser() {
       </div>
 
       <div className="mt-6 flex justify-end gap-3">
-        <button
+        <WriteAccessGuard>
+<button
           onClick={() => setShowInviteModal(false)}
           className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
         >
           Cancel
-        </button>
+        </button></WriteAccessGuard>
 
-        <button
+        <WriteAccessGuard>
+<button
           onClick={handleInviteUser}
           className="rounded-lg bg-slate-900 px-4 py-2 text-white hover:bg-slate-700"
         >
           Continue
-        </button>
+        </button></WriteAccessGuard>
       </div>
     </div>
   </div>
 )}
+    </PageAccessGuard>
 
     </DashboardLayout>
   );

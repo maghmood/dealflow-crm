@@ -1,5 +1,5 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -589,7 +589,8 @@ export default function InventoryPage() {
   );
 
   return (
-    <DashboardLayout>
+  <DashboardLayout>
+    <PageAccessGuard module="inventory">
       <div className="space-y-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -1341,6 +1342,8 @@ export default function InventoryPage() {
           </div>
         </div>
       )}
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

@@ -1,10 +1,12 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
 import { canAccessRole } from "@/lib/auth";
+import ReadOnlyNotice from "@/components/ReadOnlyNotice";
+import WriteAccessGuard from "@/components/WriteAccessGuard";
 
 type Lead = {
   id: number;
@@ -95,7 +97,9 @@ assigned_user_name: profile?.full_name,
   }
 
   return (
-    <DashboardLayout>
+  <DashboardLayout>
+    <PageAccessGuard module="leads">
+      <ReadOnlyNotice />
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-800">Leads</h1>
@@ -249,6 +253,8 @@ assigned_user_name: profile?.full_name,
           </div>
         </div>
       )}
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

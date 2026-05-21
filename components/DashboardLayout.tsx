@@ -61,7 +61,7 @@ export default function DashboardLayout({
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [branding, setBranding] = useState<Company>(fallbackBranding);
 
-  const navItems = [
+    const navItems = [
     ...(canAccessRole(profile?.role, "dashboard")
       ? [{ label: "Dashboard", href: "/" }]
       : []),
@@ -70,11 +70,19 @@ export default function DashboardLayout({
       ? [{ label: "Leads", href: "/leads" }]
       : []),
 
-    ...(canAccessRole(profile?.role, "finance")
-      ? [{ label: "Finance", href: "/finance" }]
+    ...(canAccessRole(profile?.role, "pipeline")
+      ? [{ label: "Pipeline", href: "/pipeline" }]
       : []),
 
-    ...(canAccessRole(profile?.role, "leads")
+    ...(canAccessRole(profile?.role, "tasks")
+      ? [{ label: "Tasks", href: "/tasks" }]
+      : []),
+
+    ...(canAccessRole(profile?.role, "calendar")
+      ? [{ label: "Calendar", href: "/calendar" }]
+      : []),
+
+    ...(canAccessRole(profile?.role, "customers")
       ? [{ label: "Customers", href: "/customers" }]
       : []),
 
@@ -82,20 +90,16 @@ export default function DashboardLayout({
       ? [{ label: "Inventory", href: "/inventory" }]
       : []),
 
-    ...(canAccessRole(profile?.role, "finance")
+    ...(canAccessRole(profile?.role, "deals")
       ? [{ label: "Deals", href: "/deals" }]
+      : []),
+
+    ...(canAccessRole(profile?.role, "finance")
+      ? [{ label: "Finance", href: "/finance" }]
       : []),
 
     ...(canAccessRole(profile?.role, "documents")
       ? [{ label: "Documents", href: "/documents" }]
-      : []),
-
-    ...(canAccessRole(profile?.role, "leads")
-      ? [{ label: "Tasks", href: "/tasks" }]
-      : []),
-
-    ...(canAccessRole(profile?.role, "leads")
-      ? [{ label: "Calendar", href: "/calendar" }]
       : []),
 
     ...(canAccessRole(profile?.role, "reports")

@@ -1,5 +1,5 @@
 "use client";
-
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -495,7 +495,8 @@ export default function DealsPage() {
     .reduce((sum, deal) => sum + calculateNetDealValue(deal), 0);
 
   return (
-    <DashboardLayout>
+  <DashboardLayout>
+    <PageAccessGuard module="deals">
       <div className="space-y-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -929,6 +930,8 @@ export default function DealsPage() {
           </div>
         </div>
       )}
+          </PageAccessGuard>
+
     </DashboardLayout>
   );
 }

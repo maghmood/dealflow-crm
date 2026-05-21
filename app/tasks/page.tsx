@@ -1,5 +1,7 @@
 "use client";
-
+import ReadOnlyNotice from "@/components/ReadOnlyNotice";
+import WriteAccessGuard from "@/components/WriteAccessGuard";
+import PageAccessGuard from "@/components/PageAccessGuard";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -103,7 +105,9 @@ export default function TasksPage() {
   const openCount = tasks.filter((task) => task.status !== "Completed").length;
 
   return (
-    <DashboardLayout>
+  <DashboardLayout>
+    <PageAccessGuard module="tasks">
+      <ReadOnlyNotice />
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-slate-800">Tasks</h1>
         <p className="text-slate-500">
@@ -253,12 +257,14 @@ export default function TasksPage() {
 
                     <td className="px-6 py-4">
                       {task.status !== "Completed" ? (
-                        <button
+                        <WriteAccessGuard>
+<button
                           onClick={() => markComplete(task)}
                           className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
                         >
                           Complete
                         </button>
+                        </WriteAccessGuard>
                       ) : (
                         <span className="text-sm text-slate-400">Done</span>
                       )}
@@ -281,6 +287,7 @@ export default function TasksPage() {
           </table>
         )}
       </div>
+          </PageAccessGuard>
     </DashboardLayout>
   );
 }
