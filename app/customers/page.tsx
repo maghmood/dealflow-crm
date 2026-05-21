@@ -43,6 +43,11 @@ function statusBadge(status: string | null) {
     Delivered: "bg-teal-100 text-teal-700",
     Lost: "bg-red-100 text-red-700",
     "Attempted Contact": "bg-blue-100 text-blue-700",
+    "Submitted to Finance": "bg-orange-100 text-orange-700",
+    "Test Drive Booked": "bg-yellow-100 text-yellow-700",
+    "Deal Closed": "bg-green-100 text-green-700",
+    Interested: "bg-green-100 text-green-700",
+    "Follow Up": "bg-slate-100 text-slate-700",
   };
 
   return styles[value] || "bg-slate-100 text-slate-700";
@@ -127,10 +132,6 @@ export default function CustomersPage() {
     new Set(customers.map((c) => c.status || "New Lead"))
   );
 
-  function quickAction(action: string, customer: LeadCustomer) {
-    alert(`${action} action selected for ${customer.customer || "customer"}.`);
-  }
-
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -158,51 +159,104 @@ export default function CustomersPage() {
         </div>
 
         <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
-  {[
-    ["Customer Records", customers.length, "All time", "bg-purple-100", "👥", "text-slate-900"],
-    ["Unique Emails", uniqueEmailCount, "All time", "bg-blue-100", "✉️", "text-blue-700"],
-    ["Active Customers", activeCustomerCount, "Not lost or delivered", "bg-green-100", "✅", "text-green-700"],
-    ["Leads in Pipeline", pipelineCount, "Still progressing", "bg-orange-100", "🔎", "text-orange-700"],
-    ["Delivered", deliveredCount, "Successful sales", "bg-teal-100", "✔️", "text-teal-700"],
-  ].map(([label, value, sub, bg, icon, color]) => (
-    <div
-      key={String(label)}
-      className="min-w-0 rounded-2xl bg-white p-5 shadow-sm"
-    >
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="truncate text-sm text-slate-500">{label}</p>
+          {[
+            [
+              "Customer Records",
+              customers.length,
+              "All time",
+              "bg-purple-100",
+              "👥",
+              "text-slate-900",
+            ],
+            [
+              "Unique Emails",
+              uniqueEmailCount,
+              "All time",
+              "bg-blue-100",
+              "✉️",
+              "text-blue-700",
+            ],
+            [
+              "Active Customers",
+              activeCustomerCount,
+              "Not lost or delivered",
+              "bg-green-100",
+              "✅",
+              "text-green-700",
+            ],
+            [
+              "Leads in Pipeline",
+              pipelineCount,
+              "Still progressing",
+              "bg-orange-100",
+              "🔎",
+              "text-orange-700",
+            ],
+            [
+              "Delivered",
+              deliveredCount,
+              "Successful sales",
+              "bg-teal-100",
+              "✔️",
+              "text-teal-700",
+            ],
+          ].map(([label, value, sub, bg, icon, color]) => (
+            <div
+              key={String(label)}
+              className="min-w-0 rounded-2xl bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-slate-500">{label}</p>
 
-          <h2 className={`mt-2 text-3xl font-bold ${color}`}>
-            {String(value)}
-          </h2>
+                  <h2 className={`mt-2 text-3xl font-bold ${color}`}>
+                    {String(value)}
+                  </h2>
 
-          <p className="mt-2 truncate text-xs text-slate-400">{sub}</p>
+                  <p className="mt-2 truncate text-xs text-slate-400">{sub}</p>
+                </div>
+
+                <div
+                  className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full ${bg} text-2xl`}
+                >
+                  {icon}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-
-        <div
-          className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full ${bg} text-2xl`}
-        >
-          {icon}
-        </div>
-      </div>
-    </div>
-  ))}
-</div>
 
         <div className="rounded-2xl bg-white p-5 shadow-sm">
           <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
             {[
-              ["WhatsApp", "Send message", "🟢", "bg-green-100", "hover:bg-green-50"],
+              [
+                "WhatsApp",
+                "Send message",
+                "🟢",
+                "bg-green-100",
+                "hover:bg-green-50",
+              ],
               ["Email", "Send email", "✉️", "bg-blue-100", "hover:bg-blue-50"],
               ["Call", "Log call", "📞", "bg-purple-100", "hover:bg-purple-50"],
-              ["Upsell / Cross-sell", "Suggest vehicles", "🏷️", "bg-orange-100", "hover:bg-orange-50"],
-              ["Schedule", "Book appointment", "📅", "bg-teal-100", "hover:bg-teal-50"],
+              [
+                "Upsell / Cross-sell",
+                "Suggest vehicles",
+                "🏷️",
+                "bg-orange-100",
+                "hover:bg-orange-50",
+              ],
+              [
+                "Schedule",
+                "Book appointment",
+                "📅",
+                "bg-teal-100",
+                "hover:bg-teal-50",
+              ],
               ["More", "More actions", "⋯", "bg-slate-100", "hover:bg-slate-50"],
             ].map(([title, sub, icon, bg, hover]) => (
               <button
                 key={String(title)}
-                className={`flex items-center gap-4 p-4 text-left ${hover}`}
+                className={`flex items-center gap-4 rounded-xl p-4 text-left ${hover}`}
               >
                 <span
                   className={`flex h-12 w-12 items-center justify-center rounded-full ${bg} text-xl`}
@@ -248,12 +302,12 @@ export default function CustomersPage() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
           {loading ? (
             <div className="p-6 text-slate-500">Loading customers...</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full">
+              <table className="min-w-[1180px]">
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-600">
@@ -282,7 +336,10 @@ export default function CustomersPage() {
 
                 <tbody>
                   {filteredCustomers.map((item) => (
-                    <tr key={item.id} className="border-t hover:bg-slate-50">
+                    <tr
+                      key={item.id}
+                      className="border-t border-slate-100 hover:bg-slate-50"
+                    >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
@@ -342,26 +399,12 @@ export default function CustomersPage() {
 
                       <td className="px-6 py-4">
                         <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => quickAction("WhatsApp", item)}
-                            className="rounded-lg bg-green-100 px-3 py-2 text-sm text-green-700 hover:bg-green-200"
+                          <Link
+                            href={`/customers/${item.id}`}
+                            className="whitespace-nowrap rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
                           >
-                            WA
-                          </button>
-
-                          <button
-                            onClick={() => quickAction("Email", item)}
-                            className="rounded-lg bg-blue-100 px-3 py-2 text-sm text-blue-700 hover:bg-blue-200"
-                          >
-                            Email
-                          </button>
-
-                          <button
-                            onClick={() => quickAction("Call", item)}
-                            className="rounded-lg bg-purple-100 px-3 py-2 text-sm text-purple-700 hover:bg-purple-200"
-                          >
-                            Call
-                          </button>
+                            View 360
+                          </Link>
 
                           <Link
                             href={`/leads/${item.id}`}

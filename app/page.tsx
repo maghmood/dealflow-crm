@@ -13,6 +13,7 @@ type Task = {
   due_date: string | null;
   status: string | null;
   priority: string | null;
+  task_type: string | null;
   lead_id: number | null;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
@@ -28,6 +29,52 @@ type FinanceApplication = {
   id: number;
   finance_status: string | null;
 };
+
+function isSameDay(dateOne: Date, dateTwo: Date) {
+  return (
+    dateOne.getDate() === dateTwo.getDate() &&
+    dateOne.getMonth() === dateTwo.getMonth() &&
+    dateOne.getFullYear() === dateTwo.getFullYear()
+  );
+}
+
+function isTaskOverdue(task: Task) {
+  if (!task.due_date || task.status === "Completed") return false;
+  return new Date(task.due_date) < new Date();
+}
+
+function isTaskDueSoon(task: Task) {
+  if (!task.due_date || task.status === "Completed") return false;
+
+  const now = new Date().getTime();
+  const due = new Date(task.due_date).getTime();
+  const oneHour = 60 * 60 * 1000;
+
+  return due >= now && due <= now + oneHour;
+}
+
+function agendaCardStyle(task: Task) {
+  if (isTaskOverdue(task)) {
+    return "border-red-400 bg-red-50 text-red-950";
+  }
+
+  if (isTaskDueSoon(task)) {
+    return "border-amber-400 bg-amber-50 text-amber-950";
+  }
+
+  const styles: Record<string, string> = {
+    Followup: "border-purple-400 bg-purple-50 text-purple-950",
+    "Follow-up": "border-purple-400 bg-purple-50 text-purple-950",
+    Call: "border-green-400 bg-green-50 text-green-950",
+    Finance: "border-indigo-400 bg-indigo-50 text-indigo-950",
+    Delivery: "border-teal-400 bg-teal-50 text-teal-950",
+    Meeting: "border-yellow-400 bg-yellow-50 text-yellow-950",
+    "Test Drive": "border-orange-400 bg-orange-50 text-orange-950",
+    Appointment: "border-cyan-400 bg-cyan-50 text-cyan-950",
+  };
+
+  return styles[task.task_type || ""] || "border-blue-400 bg-blue-50 text-blue-950";
+}
 
 export default function Home() {
   const { profile } = useAuth();
@@ -108,11 +155,7 @@ export default function Home() {
   );
 
   const overdueTasks = useMemo(
-    () =>
-      tasks.filter((task) => {
-        if (!task.due_date || task.status === "Completed") return false;
-        return new Date(task.due_date) < new Date();
-      }),
+    () => tasks.filter((task) => isTaskOverdue(task)),
     [tasks]
   );
 
@@ -120,16 +163,24 @@ export default function Home() {
     () =>
       tasks.filter((task) => {
         if (!task.due_date || task.status === "Completed") return false;
-
-        const today = new Date();
-        const due = new Date(task.due_date);
-
-        return (
-          due.getDate() === today.getDate() &&
-          due.getMonth() === today.getMonth() &&
-          due.getFullYear() === today.getFullYear()
-        );
+        return isSameDay(new Date(task.due_date), new Date());
       }),
+    [tasks]
+  );
+
+  const agendaTasks = useMemo(
+    () =>
+      tasks
+        .filter((task) => {
+          if (!task.due_date || task.status === "Completed") return false;
+          return isSameDay(new Date(task.due_date), new Date());
+        })
+        .sort((a, b) => {
+          const aTime = a.due_date ? new Date(a.due_date).getTime() : 0;
+          const bTime = b.due_date ? new Date(b.due_date).getTime() : 0;
+          return aTime - bTime;
+        })
+        .slice(0, 6),
     [tasks]
   );
 
@@ -254,6 +305,116 @@ export default function Home() {
               Needs immediate attention
             </p>
           </div>
+        </div>
+
+        {/* TODAY'S AGENDA */}
+        <div className="rounded-xl bg-white p-6 shadow">
+          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800">
+                Today’s Agenda
+              </h2>
+              <p className="text-sm text-slate-500">
+                Scheduled appointments, test drives, calls and follow-ups due today
+              </p>
+            </div>
+
+            <Link
+              href="/calendar"
+              className="rounded-lg brand-primary-bg px-4 py-2 text-sm font-semibold text-white"
+            >
+              Open Calendar
+            </Link>
+          </div>
+
+          {agendaTasks.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+              No open agenda items for today.
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {agendaTasks.map((task) => {
+                const overdue = isTaskOverdue(task);
+                const dueSoon = isTaskDueSoon(task);
+
+                return (
+                  <div
+                    key={task.id}
+                    className={`rounded-xl border-l-4 p-4 shadow-sm ${agendaCardStyle(
+                      task
+                    )}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold">
+                          {task.title || "Untitled Task"}
+                        </p>
+
+                        <p className="mt-1 text-sm opacity-80">
+                          {task.task_type || "Task"} •{" "}
+                          {task.assigned_user_name || "Unassigned"}
+                        </p>
+                      </div>
+
+                      <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold">
+                        {task.due_date
+                          ? new Date(task.due_date).toLocaleTimeString(
+                              "en-ZA",
+                              {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            )
+                          : "-"}
+                      </span>
+                    </div>
+
+                    {task.description && (
+                      <p className="mt-3 line-clamp-2 text-sm opacity-80">
+                        {task.description}
+                      </p>
+                    )}
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap gap-2">
+                        {dueSoon && (
+                          <span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-bold text-amber-900">
+                            Due soon
+                          </span>
+                        )}
+
+                        {overdue && (
+                          <span className="rounded-full bg-red-200 px-3 py-1 text-xs font-bold text-red-900">
+                            Overdue
+                          </span>
+                        )}
+
+                        <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold">
+                          {task.priority || "Medium"}
+                        </span>
+                      </div>
+
+                      {task.lead_id ? (
+                        <Link
+                          href={`/leads/${task.lead_id}`}
+                          className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
+                        >
+                          Open Lead
+                        </Link>
+                      ) : (
+                        <Link
+                          href="/tasks"
+                          className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
+                        >
+                          Open Task
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* TASK WIDGETS */}

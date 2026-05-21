@@ -48,10 +48,6 @@ function getHoverColor(hex: string) {
 }
 
 export default function DashboardLayout({
-
-
-  
-
   children,
 }: {
   children: React.ReactNode;
@@ -59,8 +55,10 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const { profile } = useAuth();
-const [showNotifications, setShowNotifications] = useState(false);
-const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [branding, setBranding] = useState<Company>(fallbackBranding);
 
   const navItems = [
@@ -96,7 +94,6 @@ const [notifications, setNotifications] = useState<NotificationItem[]>([]);
       ? [{ label: "Tasks", href: "/tasks" }]
       : []),
 
-
     ...(canAccessRole(profile?.role, "leads")
       ? [{ label: "Calendar", href: "/calendar" }]
       : []),
@@ -104,68 +101,59 @@ const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     ...(canAccessRole(profile?.role, "reports")
       ? [{ label: "Reports", href: "/reports" }]
       : []),
-
-    ...(canAccessRole(profile?.role, "settings")
-      ? [{ label: "Settings", href: "/settings" }]
-      : []),
-
-      ...(canAccessRole(profile?.role, "userManagement")
-  ? [{ label: "Users", href: "/settings/users" }]
-  : []),
-
   ];
 
-async function fetchNotifications() {
-  if (!profile?.company_id) return;
+  async function fetchNotifications() {
+    if (!profile?.company_id) return;
 
-  let query = supabase
-    .from("tasks")
-    .select("id, title, due_date, status, lead_id, assigned_user_id")
-    .eq("company_id", profile.company_id)
-    .neq("status", "Completed")
-    .order("due_date", { ascending: true });
+    let query = supabase
+      .from("tasks")
+      .select("id, title, due_date, status, lead_id, assigned_user_id")
+      .eq("company_id", profile.company_id)
+      .neq("status", "Completed")
+      .order("due_date", { ascending: true });
 
-  if (profile.role === "Sales") {
-    query = query.eq("assigned_user_id", profile.id);
+    if (profile.role === "Sales") {
+      query = query.eq("assigned_user_id", profile.id);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error loading notifications:", error.message);
+      setNotifications([]);
+      return;
+    }
+
+    const now = new Date();
+
+    const items: NotificationItem[] = (data || [])
+      .map((task: any) => {
+        const dueDate = task.due_date ? new Date(task.due_date) : null;
+
+        if (!dueDate) return null;
+
+        const isOverdue = dueDate < now;
+
+        const isDueToday =
+          dueDate.getDate() === now.getDate() &&
+          dueDate.getMonth() === now.getMonth() &&
+          dueDate.getFullYear() === now.getFullYear();
+
+        if (!isOverdue && !isDueToday) return null;
+
+        return {
+          id: task.id,
+          title: isOverdue ? "Overdue Task" : "Task Due Today",
+          message: task.title,
+          href: task.lead_id ? `/leads/${task.lead_id}` : "/tasks",
+          severity: isOverdue ? "red" : "orange",
+        };
+      })
+      .filter(Boolean) as NotificationItem[];
+
+    setNotifications(items);
   }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error("Error loading notifications:", error.message);
-    setNotifications([]);
-    return;
-  }
-
-  const now = new Date();
-
-  const items: NotificationItem[] = (data || [])
-    .map((task: any) => {
-      const dueDate = task.due_date ? new Date(task.due_date) : null;
-
-      if (!dueDate) return null;
-
-      const isOverdue = dueDate < now;
-
-      const isDueToday =
-        dueDate.getDate() === now.getDate() &&
-        dueDate.getMonth() === now.getMonth() &&
-        dueDate.getFullYear() === now.getFullYear();
-
-      if (!isOverdue && !isDueToday) return null;
-
-      return {
-        id: task.id,
-        title: isOverdue ? "Overdue Task" : "Task Due Today",
-        message: task.title,
-        href: task.lead_id ? `/leads/${task.lead_id}` : "/tasks",
-        severity: isOverdue ? "red" : "orange",
-      };
-    })
-    .filter(Boolean) as NotificationItem[];
-
-  setNotifications(items);
-}
 
   async function fetchBranding() {
     const companyId = profile?.company_id || 1;
@@ -192,26 +180,27 @@ async function fetchNotifications() {
 
   async function logout() {
     await supabase.auth.signOut();
+    setShowUserMenu(false);
     router.push("/login");
   }
 
-useEffect(() => {
-  fetchBranding();
-  fetchNotifications();
-
-  function handleBrandingUpdated() {
+  useEffect(() => {
     fetchBranding();
-  }
+    fetchNotifications();
 
-  window.addEventListener("dealflow-branding-updated", handleBrandingUpdated);
+    function handleBrandingUpdated() {
+      fetchBranding();
+    }
 
-  return () => {
-    window.removeEventListener(
-      "dealflow-branding-updated",
-      handleBrandingUpdated
-    );
-  };
-}, [profile?.company_id, profile?.role, profile?.id]);
+    window.addEventListener("dealflow-branding-updated", handleBrandingUpdated);
+
+    return () => {
+      window.removeEventListener(
+        "dealflow-branding-updated",
+        handleBrandingUpdated
+      );
+    };
+  }, [profile?.company_id, profile?.role, profile?.id]);
 
   const primaryColor = branding.primary_color || "#0f172a";
   const accentColor = branding.accent_color || "#2563eb";
@@ -295,46 +284,6 @@ useEffect(() => {
             })}
           </nav>
 
-
-
-<button
-  onClick={async () => {
-    const response = await fetch("/api/whatsapp/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        to: "27607592060",
-        message: "Hello from DealFlow CRM 🚗",
-      }),
-    });
-
-    const data = await response.json();
-    console.log("WHATSAPP RESULT:", data);
-
-    if (!response.ok) {
-      alert("WhatsApp failed. Check browser console.");
-      return;
-    }
-
-    alert("WhatsApp sent successfully.");
-  }}
-  className="rounded-xl bg-green-600 px-4 py-2 text-white"
->
-  Test WhatsApp
-</button>
-
-
-
-
-          <button
-            onClick={logout}
-            className="mx-4 mb-4 rounded-xl px-4 py-3 text-left text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white"
-          >
-            Log out
-          </button>
-
           <div className="border-t border-white/10 p-4 text-xs text-white/50">
             DealFlow SaaS Platform
           </div>
@@ -351,164 +300,228 @@ useEffect(() => {
 
             <div className="flex items-center gap-5">
               <div className="relative">
-  <button
-    onClick={() => setShowNotifications(!showNotifications)}
-    className="relative rounded-full border border-slate-200 bg-white p-3 text-slate-600 hover:bg-slate-50"
-  >
-    🔔
-
-    {notifications.length > 0 && (
-      <span className="absolute -right-1 -top-1 rounded-full bg-red-600 px-1.5 py-0.5 text-xs text-white">
-        {notifications.length}
-      </span>
-    )}
-  </button>
-
-  {showNotifications && (
-  <div className="absolute right-0 z-50 mt-4 w-[460px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-    
-    {/* HEADER */}
-    <div className="border-b border-slate-100 px-6 py-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-2xl font-bold text-slate-800">
-            Notifications
-          </h3>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Tasks and follow-ups needing attention
-          </p>
-        </div>
-
-        <div className="rounded-full bg-red-50 px-3 py-1 text-sm font-semibold text-red-600">
-          {notifications.length} New
-        </div>
-      </div>
-    </div>
-
-    {/* BODY */}
-    <div className="max-h-[520px] overflow-y-auto bg-slate-50/50 p-4">
-      {notifications.length === 0 ? (
-        <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-3xl">
-            🔔
-          </div>
-
-          <h4 className="text-lg font-semibold text-slate-700">
-            All caught up
-          </h4>
-
-          <p className="mt-2 text-sm text-slate-500">
-            No urgent notifications right now.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {notifications.map((notification) => (
-            <Link
-              key={`${notification.title}-${notification.id}`}
-              href={notification.href}
-              onClick={() => setShowNotifications(false)}
-              className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-            >
-              <div className="flex items-start gap-4">
-                
-                {/* ICON */}
-                <div
-                  className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${
-                    notification.severity === "red"
-                      ? "bg-red-100 text-red-600"
-                      : notification.severity === "orange"
-                      ? "bg-orange-100 text-orange-600"
-                      : "bg-blue-100 text-blue-600"
-                  }`}
+                <button
+                  onClick={() => {
+                    setShowNotifications(!showNotifications);
+                    setShowUserMenu(false);
+                  }}
+                  className="relative rounded-full border border-slate-200 bg-white p-3 text-slate-600 hover:bg-slate-50"
                 >
-                  {notification.severity === "red"
-                    ? "⚠️"
-                    : notification.severity === "orange"
-                    ? "⏰"
-                    : "🔔"}
-                </div>
+                  🔔
 
-                {/* CONTENT */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h4 className="font-bold text-slate-800">
-                        {notification.title}
-                      </h4>
+                  {notifications.length > 0 && (
+                    <span className="absolute -right-1 -top-1 rounded-full bg-red-600 px-1.5 py-0.5 text-xs text-white">
+                      {notifications.length}
+                    </span>
+                  )}
+                </button>
 
-                      <p className="mt-1 text-sm text-slate-500">
-                        {notification.message}
-                      </p>
+                {showNotifications && (
+                  <div className="absolute right-0 z-50 mt-4 w-[460px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                    <div className="border-b border-slate-100 px-6 py-5">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="text-2xl font-bold text-slate-800">
+                            Notifications
+                          </h3>
+
+                          <p className="mt-1 text-sm text-slate-500">
+                            Tasks and follow-ups needing attention
+                          </p>
+                        </div>
+
+                        <div className="rounded-full bg-red-50 px-3 py-1 text-sm font-semibold text-red-600">
+                          {notifications.length} New
+                        </div>
+                      </div>
                     </div>
 
-                    <div
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        notification.severity === "red"
-                          ? "bg-red-100 text-red-700"
-                          : notification.severity === "orange"
-                          ? "bg-orange-100 text-orange-700"
-                          : "bg-blue-100 text-blue-700"
-                      }`}
-                    >
-                      {notification.severity === "red"
-                        ? "Overdue"
-                        : notification.severity === "orange"
-                        ? "Due Today"
-                        : "Update"}
+                    <div className="max-h-[520px] overflow-y-auto bg-slate-50/50 p-4">
+                      {notifications.length === 0 ? (
+                        <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
+                          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-3xl">
+                            🔔
+                          </div>
+
+                          <h4 className="text-lg font-semibold text-slate-700">
+                            All caught up
+                          </h4>
+
+                          <p className="mt-2 text-sm text-slate-500">
+                            No urgent notifications right now.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {notifications.map((notification) => (
+                            <Link
+                              key={`${notification.title}-${notification.id}`}
+                              href={notification.href}
+                              onClick={() => setShowNotifications(false)}
+                              className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+                            >
+                              <div className="flex items-start gap-4">
+                                <div
+                                  className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${
+                                    notification.severity === "red"
+                                      ? "bg-red-100 text-red-600"
+                                      : notification.severity === "orange"
+                                      ? "bg-orange-100 text-orange-600"
+                                      : "bg-blue-100 text-blue-600"
+                                  }`}
+                                >
+                                  {notification.severity === "red"
+                                    ? "⚠️"
+                                    : notification.severity === "orange"
+                                    ? "⏰"
+                                    : "🔔"}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <h4 className="font-bold text-slate-800">
+                                        {notification.title}
+                                      </h4>
+
+                                      <p className="mt-1 text-sm text-slate-500">
+                                        {notification.message}
+                                      </p>
+                                    </div>
+
+                                    <div
+                                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                        notification.severity === "red"
+                                          ? "bg-red-100 text-red-700"
+                                          : notification.severity === "orange"
+                                          ? "bg-orange-100 text-orange-700"
+                                          : "bg-blue-100 text-blue-700"
+                                      }`}
+                                    >
+                                      {notification.severity === "red"
+                                        ? "Overdue"
+                                        : notification.severity === "orange"
+                                        ? "Due Today"
+                                        : "Update"}
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-4 flex items-center justify-between">
+                                    <span className="text-xs text-slate-400">
+                                      Open linked lead
+                                    </span>
+
+                                    <span className="text-sm font-semibold text-blue-700">
+                                      View →
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-100 bg-white px-6 py-4">
+                      <Link
+                        href="/tasks"
+                        onClick={() => setShowNotifications(false)}
+                        className="flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+                      >
+                        View All Tasks
+                      </Link>
                     </div>
                   </div>
-
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-xs text-slate-400">
-                      Open linked lead
-                    </span>
-
-                    <span className="text-sm font-semibold text-blue-700">
-                      View →
-                    </span>
-                  </div>
-                </div>
+                )}
               </div>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-
-    {/* FOOTER */}
-    <div className="border-t border-slate-100 bg-white px-6 py-4">
-      <Link
-        href="/tasks"
-        onClick={() => setShowNotifications(false)}
-        className="flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-      >
-        View All Tasks
-      </Link>
-    </div>
-  </div>
-)}
-</div>
 
               <div className="h-8 w-px bg-slate-200" />
 
-              <div className="flex items-center gap-3">
-                <div
-                  className="flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white"
-                  style={{ backgroundColor: primaryColor }}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowUserMenu(!showUserMenu);
+                    setShowNotifications(false);
+                  }}
+                  className="flex items-center gap-3 rounded-2xl border border-transparent px-2 py-1.5 transition hover:border-slate-200 hover:bg-slate-50"
                 >
-                  {initials}
-                </div>
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    {initials}
+                  </div>
 
-                <div className="hidden sm:block">
-                  <p className="text-sm font-semibold text-slate-800">
-                    {profile?.full_name || "User"}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {profile?.role || "User"}
-                  </p>
-                </div>
+                  <div className="hidden text-left sm:block">
+                    <p className="text-sm font-semibold text-slate-800">
+                      {profile?.full_name || "User"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {profile?.role || "User"}
+                    </p>
+                  </div>
+
+                  <span className="hidden text-xs text-slate-400 sm:inline">
+                    ▾
+                  </span>
+                </button>
+
+                {showUserMenu && (
+                  <div className="absolute right-0 z-50 mt-3 w-72 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                    <div className="border-b border-slate-100 px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold text-white"
+                          style={{ backgroundColor: primaryColor }}
+                        >
+                          {initials}
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-slate-900">
+                            {profile?.full_name || "User"}
+                          </p>
+                          <p className="truncate text-xs text-slate-500">
+                            {profile?.role || "User"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-2">
+                      {canAccessRole(profile?.role, "settings") && (
+                        <Link
+                          href="/settings"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          <span>Settings</span>
+                          <span className="text-slate-400">→</span>
+                        </Link>
+                      )}
+
+                      {canAccessRole(profile?.role, "userManagement") && (
+                        <Link
+                          href="/settings/users"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          <span>User Management</span>
+                          <span className="text-slate-400">→</span>
+                        </Link>
+                      )}
+
+                      <button
+                        onClick={logout}
+                        className="mt-1 flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
+                      >
+                        <span>Log out</span>
+                        <span>↗</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </header>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabaseClient";
@@ -11,6 +12,16 @@ type SalesUser = {
   full_name: string | null;
   email: string | null;
   role: string | null;
+};
+
+type LeadTask = {
+  id: number;
+  title: string;
+  description: string | null;
+  status: string | null;
+  priority: string | null;
+  due_date: string | null;
+  assigned_user_name: string | null;
 };
 
 type Lead = {
@@ -46,6 +57,73 @@ type WhatsAppDbMessage = {
   created_at: string;
 };
 
+type FinanceDocument = {
+  id: number;
+  lead_id: number | null;
+  company_id: number | null;
+  customer_name: string | null;
+  uploaded_by: string | null;
+  document_type: string | null;
+  file_url: string | null;
+  created_at: string;
+};
+
+type InventoryVehicle = {
+  id: number;
+  company_id: number | null;
+  stock_code: string | null;
+  make: string | null;
+  model: string | null;
+  variant: string | null;
+  year: number | null;
+  mileage: number | null;
+  price: number | null;
+  cost_price: number | null;
+  colour: string | null;
+  vin: string | null;
+  registration_number: string | null;
+  image_url: string | null;
+  status: string | null;
+  location: string | null;
+  notes: string | null;
+  linked_lead_id: number | null;
+  linked_customer_name: string | null;
+  created_at: string | null;
+};
+
+function formatRand(value: number | null | undefined) {
+  if (!value && value !== 0) return "Not captured";
+
+  return `R${Number(value).toLocaleString("en-ZA", {
+    maximumFractionDigits: 0,
+  })}`;
+}
+
+function formatVehicleTitle(vehicle: InventoryVehicle | null) {
+  if (!vehicle) return "Vehicle not selected";
+
+  return `${vehicle.year || ""} ${vehicle.make || ""} ${vehicle.model || ""} ${
+    vehicle.variant || ""
+  }`
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function vehicleStatusBadge(status: string | null) {
+  const value = status || "Available";
+
+  const styles: Record<string, string> = {
+    Available: "bg-green-100 text-green-700",
+    Reserved: "bg-orange-100 text-orange-700",
+    Sold: "bg-slate-200 text-slate-700",
+    "In Prep": "bg-blue-100 text-blue-700",
+    Delivered: "bg-purple-100 text-purple-700",
+    "On Hold": "bg-red-100 text-red-700",
+  };
+
+  return styles[value] || "bg-slate-100 text-slate-700";
+}
+
 export default function LeadDetailPage() {
   const params = useParams();
   const leadId = Number(params.id);
@@ -54,14 +132,31 @@ export default function LeadDetailPage() {
   const whatsappSectionRef = useRef<HTMLDivElement | null>(null);
   const whatsappInputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [leadTasks, setLeadTasks] = useState<LeadTask[]>([]);
   const [salesUsers, setSalesUsers] = useState<SalesUser[]>([]);
   const [assignedUserId, setAssignedUserId] = useState<number | "">("");
 
   const [lead, setLead] = useState<Lead | null>(null);
-  const [financeApplicationId, setFinanceApplicationId] = useState<number | null>(null);
+  const [financeApplicationId, setFinanceApplicationId] = useState<
+    number | null
+  >(null);
   const [loading, setLoading] = useState(true);
 
-  const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppDbMessage[]>([]);
+  const [linkedVehicle, setLinkedVehicle] = useState<InventoryVehicle | null>(
+    null
+  );
+  const [inventoryVehicles, setInventoryVehicles] = useState<InventoryVehicle[]>(
+    []
+  );
+  const [selectedInventoryVehicleId, setSelectedInventoryVehicleId] = useState<
+    number | ""
+  >("");
+  const [showVehicleLinkModal, setShowVehicleLinkModal] = useState(false);
+  const [linkingVehicle, setLinkingVehicle] = useState(false);
+
+  const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppDbMessage[]>(
+    []
+  );
   const [whatsappInput, setWhatsappInput] = useState("");
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
 
@@ -78,6 +173,10 @@ export default function LeadDetailPage() {
 
   const [leadStatus, setLeadStatus] = useState("New Lead");
   const [timeline, setTimeline] = useState<Activity[]>([]);
+
+  const [documents, setDocuments] = useState<FinanceDocument[]>([]);
+  const [documentType, setDocumentType] = useState("ID Copy");
+  const [uploadingDocument, setUploadingDocument] = useState(false);
 
   const [vehiclePrice, setVehiclePrice] = useState("429900");
   const [deposit, setDeposit] = useState("40000");
@@ -108,6 +207,164 @@ export default function LeadDetailPage() {
     }
 
     return cleaned;
+  }
+
+  function getFileNameFromUrl(fileUrl: string | null) {
+    if (!fileUrl) return "Document file";
+
+    try {
+      const url = new URL(fileUrl);
+      const lastPart = url.pathname.split("/").pop();
+      return lastPart ? decodeURIComponent(lastPart) : "Document file";
+    } catch {
+      const lastPart = fileUrl.split("/").pop();
+      return lastPart || "Document file";
+    }
+  }
+
+  async function fetchLeadTasks() {
+    if (!profile?.company_id) return;
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("lead_id", leadId)
+      .eq("company_id", profile.company_id)
+      .order("due_date", { ascending: true });
+
+    if (error) {
+      console.error("Error loading lead tasks:", error.message);
+      setLeadTasks([]);
+      return;
+    }
+
+    setLeadTasks(data || []);
+  }
+
+  async function fetchLinkedInventoryVehicle() {
+    if (!profile?.company_id) return;
+
+    const { data, error } = await supabase
+      .from("inventory_vehicles")
+      .select("*")
+      .eq("company_id", profile.company_id)
+      .eq("linked_lead_id", leadId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error loading linked inventory vehicle:", error.message);
+      setLinkedVehicle(null);
+      return;
+    }
+
+    setLinkedVehicle(data || null);
+
+    if (data?.price) {
+      setVehiclePrice(String(data.price));
+    }
+  }
+
+  async function fetchInventoryVehicles() {
+    if (!profile?.company_id) return;
+
+    const { data, error } = await supabase
+      .from("inventory_vehicles")
+      .select("*")
+      .eq("company_id", profile.company_id)
+      .in("status", ["Available", "Reserved", "In Prep", "On Hold"])
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading inventory vehicles:", error.message);
+      setInventoryVehicles([]);
+      return;
+    }
+
+    setInventoryVehicles(Array.isArray(data) ? data : []);
+  }
+
+  async function linkInventoryVehicleToLead() {
+    if (!profile?.company_id || !lead || selectedInventoryVehicleId === "") {
+      alert("Please select a vehicle to link.");
+      return;
+    }
+
+    const selectedVehicle = inventoryVehicles.find(
+      (vehicle) => vehicle.id === Number(selectedInventoryVehicleId)
+    );
+
+    if (!selectedVehicle) {
+      alert("Selected vehicle could not be found.");
+      return;
+    }
+
+    setLinkingVehicle(true);
+
+    const title = formatVehicleTitle(selectedVehicle);
+
+    if (linkedVehicle?.id && linkedVehicle.id !== selectedVehicle.id) {
+      await supabase
+        .from("inventory_vehicles")
+        .update({
+          linked_lead_id: null,
+          linked_customer_name: null,
+          status:
+            linkedVehicle.status === "Reserved"
+              ? "Available"
+              : linkedVehicle.status || "Available",
+        })
+        .eq("id", linkedVehicle.id)
+        .eq("company_id", profile.company_id);
+    }
+
+    const { error: vehicleError } = await supabase
+      .from("inventory_vehicles")
+      .update({
+        linked_lead_id: lead.id,
+        linked_customer_name: lead.customer,
+        status:
+          selectedVehicle.status === "Available"
+            ? "Reserved"
+            : selectedVehicle.status || "Reserved",
+      })
+      .eq("id", selectedVehicle.id)
+      .eq("company_id", profile.company_id);
+
+    if (vehicleError) {
+      alert("Error linking vehicle: " + vehicleError.message);
+      setLinkingVehicle(false);
+      return;
+    }
+
+    const { error: leadError } = await supabase
+      .from("leads")
+      .update({ vehicle: title })
+      .eq("id", lead.id)
+      .eq("company_id", profile.company_id);
+
+    if (leadError) {
+      alert("Vehicle linked, but lead update failed: " + leadError.message);
+      setLinkingVehicle(false);
+      return;
+    }
+
+    await addActivity(
+      "Vehicle Linked",
+      `${title}${
+        selectedVehicle.stock_code ? ` • Stock ${selectedVehicle.stock_code}` : ""
+      } linked from inventory.`,
+      "inventory",
+      "green"
+    );
+
+    setLead({ ...lead, vehicle: title });
+    setVehiclePrice(selectedVehicle.price ? String(selectedVehicle.price) : vehiclePrice);
+    setShowVehicleLinkModal(false);
+    setSelectedInventoryVehicleId("");
+    setLinkingVehicle(false);
+
+    await fetchLinkedInventoryVehicle();
+    await fetchInventoryVehicles();
   }
 
   async function fetchWhatsappMessages() {
@@ -319,6 +576,7 @@ export default function LeadDetailPage() {
     setTaskDueDate("");
     setTaskPriority("Medium");
     setTaskAssignedUserId("");
+    fetchLeadTasks();
 
     alert("Task created successfully.");
   }
@@ -463,6 +721,104 @@ export default function LeadDetailPage() {
     setFinanceApplicationId(data ? data.id : null);
   }
 
+  async function fetchDocuments() {
+    if (!profile?.company_id) return;
+
+    const { data, error } = await supabase
+      .from("finance_documents")
+      .select("*")
+      .eq("lead_id", leadId)
+      .eq("company_id", profile.company_id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading documents:", error.message);
+      setDocuments([]);
+      return;
+    }
+
+    setDocuments(Array.isArray(data) ? data : []);
+  }
+
+  async function uploadDocument(file: File) {
+    if (!lead || !profile?.company_id) return;
+
+    if (!documentType.trim()) {
+      alert("Please select a document type.");
+      return;
+    }
+
+    setUploadingDocument(true);
+
+    try {
+      const fileExt = file.name.includes(".")
+        ? file.name.split(".").pop()
+        : "file";
+      const safeCustomer = (lead.customer || "customer")
+        .replace(/[^a-zA-Z0-9]/g, "-")
+        .replace(/-+/g, "-")
+        .toLowerCase();
+
+      const safeDocType = documentType
+        .replace(/[^a-zA-Z0-9]/g, "-")
+        .replace(/-+/g, "-")
+        .toLowerCase();
+
+      const fileName = `${safeDocType}-${Date.now()}.${fileExt}`;
+      const filePath = `${profile.company_id}/leads/${lead.id}/${safeCustomer}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("finance-documents")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        alert("Document upload failed: " + uploadError.message);
+        return;
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("finance-documents").getPublicUrl(filePath);
+
+      const { error: insertError } = await supabase
+        .from("finance_documents")
+        .insert({
+          lead_id: lead.id,
+          company_id: profile.company_id,
+          customer_name: lead.customer,
+          uploaded_by: profile.full_name || profile.email || "Unknown User",
+          document_type: documentType,
+          file_url: publicUrl,
+        });
+
+      if (insertError) {
+        alert(
+          "Document uploaded, but failed to save record: " +
+            insertError.message
+        );
+        return;
+      }
+
+      await addActivity(
+        "Document Uploaded",
+        `${documentType} uploaded for ${lead.customer}`,
+        "document",
+        "blue"
+      );
+
+      await fetchDocuments();
+      alert("Document uploaded successfully.");
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      alert("Unexpected error uploading document.");
+    } finally {
+      setUploadingDocument(false);
+    }
+  }
+
   useEffect(() => {
     if (!leadId || !profile?.company_id) return;
 
@@ -471,6 +827,10 @@ export default function LeadDetailPage() {
     checkFinanceApplication();
     fetchSalesUsers();
     fetchWhatsappMessages();
+    fetchDocuments();
+    fetchLeadTasks();
+    fetchLinkedInventoryVehicle();
+    fetchInventoryVehicles();
   }, [leadId, profile?.company_id]);
 
   if (loading) {
@@ -487,12 +847,15 @@ export default function LeadDetailPage() {
         <div className="rounded-xl bg-white p-10 shadow">
           <h1 className="text-2xl font-bold text-slate-800">Lead Not Found</h1>
           <p className="mt-3 text-slate-500">
-            You do not have permission to view this lead, or it no longer exists.
+            You do not have permission to view this lead, or it no longer
+            exists.
           </p>
         </div>
       </DashboardLayout>
     );
   }
+
+  const linkedVehicleTitle = formatVehicleTitle(linkedVehicle);
 
   return (
     <DashboardLayout>
@@ -505,7 +868,7 @@ export default function LeadDetailPage() {
                   {lead.customer}
                 </h1>
                 <p className="mt-1 text-slate-500">
-                  Interested in {lead.vehicle}
+                  Interested in {lead.vehicle || "No vehicle selected"}
                 </p>
               </div>
 
@@ -577,7 +940,9 @@ export default function LeadDetailPage() {
                   </select>
                 ) : (
                   <p className="mt-1 text-lg font-medium text-slate-800">
-                    {lead.assigned_user_name || lead.salesperson || "Unassigned"}
+                    {lead.assigned_user_name ||
+                      lead.salesperson ||
+                      "Unassigned"}
                   </p>
                 )}
               </div>
@@ -599,66 +964,155 @@ export default function LeadDetailPage() {
           </div>
 
           <div className="rounded-xl bg-white p-6 shadow">
-            <div className="flex items-start justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-slate-800">
                   Vehicle Interest
                 </h2>
-                <p className="text-slate-500">Customer selected vehicle</p>
+                <p className="text-slate-500">
+                  Vehicle linked from inventory stock
+                </p>
               </div>
 
-              <span className="rounded-full bg-green-100 px-3 py-1 text-sm text-green-700">
-                In Stock
-              </span>
-            </div>
+              <div className="flex flex-wrap gap-2">
+                {linkedVehicle && (
+                  <span
+                    className={`rounded-full px-3 py-1 text-sm font-semibold ${vehicleStatusBadge(
+                      linkedVehicle.status
+                    )}`}
+                  >
+                    {linkedVehicle.status || "Available"}
+                  </span>
+                )}
 
-            <div className="mt-6 grid gap-5 md:grid-cols-3">
-              <div className="flex h-40 items-center justify-center rounded-xl bg-slate-200 text-slate-500">
-                Vehicle Image
-              </div>
-
-              <div className="md:col-span-2">
-                <h3 className="text-xl font-bold text-slate-800">
-                  {lead.vehicle || "Vehicle not selected"}
-                </h3>
-
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div>
-                    <p className="text-sm text-slate-500">Price</p>
-                    <p className="text-lg font-semibold text-slate-800">
-                      R429,900
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-slate-500">Mileage</p>
-                    <p className="text-lg font-semibold text-slate-800">
-                      32,000 km
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-slate-500">
-                      Estimated Installment
-                    </p>
-                    <p className="text-lg font-semibold text-slate-800">
-                      R7,899/month
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-slate-500">Stock Code</p>
-                    <p className="text-lg font-semibold text-slate-800">
-                      DF-POLO-221
-                    </p>
-                  </div>
-                </div>
-
-                <button className="mt-5 rounded-lg brand-primary-bg px-4 py-2 text-white">
-                  View Stock Details
+                <button
+                  onClick={() => {
+                    setSelectedInventoryVehicleId(linkedVehicle?.id || "");
+                    setShowVehicleLinkModal(true);
+                  }}
+                  className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700 hover:bg-blue-200"
+                >
+                  {linkedVehicle ? "Change Vehicle" : "Link Vehicle"}
                 </button>
               </div>
             </div>
+
+            {!linkedVehicle ? (
+              <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+                <div className="text-4xl">🚗</div>
+                <h3 className="mt-3 text-xl font-bold text-slate-800">
+                  No inventory vehicle linked yet
+                </h3>
+                <p className="mt-2 text-slate-500">
+                  Link a vehicle from inventory so the price, mileage, stock code
+                  and image display here automatically.
+                </p>
+                <button
+                  onClick={() => setShowVehicleLinkModal(true)}
+                  className="mt-5 rounded-lg brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
+                >
+                  Link Vehicle from Inventory
+                </button>
+              </div>
+            ) : (
+              <div className="mt-6 grid gap-5 md:grid-cols-3">
+                <div className="flex h-48 items-center justify-center overflow-hidden rounded-xl bg-slate-200 text-slate-500">
+                  {linkedVehicle.image_url ? (
+                    <img
+                      src={linkedVehicle.image_url}
+                      alt={linkedVehicleTitle}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-center">
+                      <div className="text-4xl">🚗</div>
+                      <p className="mt-2 text-sm">No vehicle image</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="md:col-span-2">
+                  <h3 className="text-xl font-bold text-slate-800">
+                    {linkedVehicleTitle}
+                  </h3>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Stock: {linkedVehicle.stock_code || "-"} • VIN:{" "}
+                    {linkedVehicle.vin || "-"}
+                  </p>
+
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-sm text-slate-500">Price</p>
+                      <p className="text-lg font-semibold text-slate-800">
+                        {formatRand(linkedVehicle.price)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500">Mileage</p>
+                      <p className="text-lg font-semibold text-slate-800">
+                        {linkedVehicle.mileage
+                          ? `${linkedVehicle.mileage.toLocaleString(
+                              "en-ZA"
+                            )} km`
+                          : "Not captured"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500">
+                        Estimated Installment
+                      </p>
+                      <p className="text-lg font-semibold text-slate-800">
+                        R
+                        {estimatedInstallment.toLocaleString("en-ZA", {
+                          maximumFractionDigits: 0,
+                        })}
+                        /month
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500">Stock Code</p>
+                      <p className="text-lg font-semibold text-slate-800">
+                        {linkedVehicle.stock_code || "-"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500">Colour</p>
+                      <p className="text-lg font-semibold text-slate-800">
+                        {linkedVehicle.colour || "-"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500">Location</p>
+                      <p className="text-lg font-semibold text-slate-800">
+                        {linkedVehicle.location || "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <Link
+                      href="/inventory"
+                      className="rounded-lg brand-primary-bg px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Open Inventory
+                    </Link>
+
+                    <button
+                      onClick={() => setShowVehicleLinkModal(true)}
+                      className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Change Linked Vehicle
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl bg-white p-6 shadow">
@@ -700,7 +1154,9 @@ export default function LeadDetailPage() {
             <div className="mt-5 space-y-3">
               <button
                 onClick={() => {
-                  setTaskAssignedUserId(lead.assigned_user_id || profile?.id || "");
+                  setTaskAssignedUserId(
+                    lead.assigned_user_id || profile?.id || ""
+                  );
                   setShowTaskModal(true);
                 }}
                 className="w-full rounded-lg px-4 py-3 text-white transition"
@@ -730,6 +1186,13 @@ export default function LeadDetailPage() {
                 className="w-full rounded-lg brand-accent-bg px-4 py-3 text-white"
               >
                 Log Call Attempt
+              </button>
+
+              <button
+                onClick={() => setShowVehicleLinkModal(true)}
+                className="w-full rounded-lg bg-blue-600 px-4 py-3 text-white hover:bg-blue-500"
+              >
+                {linkedVehicle ? "Change Linked Vehicle" : "Link Vehicle"}
               </button>
 
               {financeApplicationId ? (
@@ -845,6 +1308,124 @@ export default function LeadDetailPage() {
             </button>
           </div>
 
+          <div className="rounded-xl bg-white p-6 shadow">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">
+                  Lead Documents
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Upload and manage documents linked to this lead
+                </p>
+              </div>
+
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                {documents.length} file{documents.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              <div>
+                <label className="text-sm font-medium text-slate-600">
+                  Document Type
+                </label>
+                <select
+                  value={documentType}
+                  onChange={(e) => setDocumentType(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-slate-800"
+                >
+                  <option>ID Copy</option>
+                  <option>Proof of Address</option>
+                  <option>Bank Statement</option>
+                  <option>Payslip</option>
+                  <option>Driver License</option>
+                  <option>Settlement Letter</option>
+                  <option>Finance Application</option>
+                  <option>Signed Offer</option>
+                  <option>Other</option>
+                </select>
+              </div>
+
+              <label className="block w-full cursor-pointer rounded-lg brand-primary-bg px-4 py-3 text-center text-sm font-semibold text-white hover:opacity-90">
+                {uploadingDocument
+                  ? "Uploading Document..."
+                  : "Upload Document"}
+                <input
+                  type="file"
+                  className="hidden"
+                  disabled={uploadingDocument}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+
+                    if (file) {
+                      await uploadDocument(file);
+                      e.target.value = "";
+                    }
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {documents.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+                  <p className="font-medium text-slate-700">
+                    No documents uploaded yet.
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Upload ID copies, payslips, bank statements and other
+                    finance documents here.
+                  </p>
+                </div>
+              ) : (
+                documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-800">
+                          {doc.document_type || "Document"}
+                        </p>
+                        <p className="mt-1 truncate text-sm text-slate-500">
+                          {getFileNameFromUrl(doc.file_url)}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Uploaded by {doc.uploaded_by || "Unknown"}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {doc.created_at
+                            ? new Date(doc.created_at).toLocaleString("en-ZA")
+                            : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <a
+                        href={doc.file_url || "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        View
+                      </a>
+
+                      <a
+                        href={doc.file_url || "#"}
+                        download
+                        className="rounded-lg brand-primary-bg px-3 py-2 text-center text-sm font-medium text-white"
+                      >
+                        Download
+                      </a>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
           <div
             id="whatsapp"
             ref={whatsappSectionRef}
@@ -935,39 +1516,227 @@ export default function LeadDetailPage() {
           </div>
 
           <div className="rounded-xl bg-white p-6 shadow">
-            <h2 className="text-xl font-bold text-slate-800">
-              Follow-Up Tasks
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-800">
+                Follow-Up Tasks
+              </h2>
+
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                {leadTasks.length} task{leadTasks.length === 1 ? "" : "s"}
+              </span>
+            </div>
 
             <div className="mt-5 space-y-4">
-              <div className="rounded-lg bg-slate-100 p-4">
-                <p className="font-medium text-slate-800">
-                  Follow up tomorrow
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Customer wants updated quote
-                </p>
-              </div>
+              {leadTasks.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 p-5 text-center">
+                  <p className="text-sm font-medium text-slate-600">
+                    No follow-up tasks yet.
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Use “Add Follow-Up Task” to create the next action for this
+                    lead.
+                  </p>
+                </div>
+              ) : (
+                leadTasks.map((task) => {
+                  const isOverdue =
+                    task.due_date &&
+                    task.status !== "Completed" &&
+                    new Date(task.due_date) < new Date();
 
-              <div className="rounded-lg bg-slate-100 p-4">
-                <p className="font-medium text-slate-800">
-                  Await bank statements
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Requested via WhatsApp
-                </p>
-              </div>
+                  return (
+                    <div
+                      key={task.id}
+                      className={`rounded-lg border p-4 ${
+                        isOverdue
+                          ? "border-red-200 bg-red-50"
+                          : task.status === "Completed"
+                          ? "border-green-200 bg-green-50"
+                          : "border-slate-200 bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-slate-800">
+                            {task.title}
+                          </p>
+
+                          {task.description && (
+                            <p className="mt-1 text-sm text-slate-500">
+                              {task.description}
+                            </p>
+                          )}
+
+                          {task.due_date && (
+                            <p className="mt-2 text-xs text-slate-500">
+                              Due:{" "}
+                              {new Date(task.due_date).toLocaleString("en-ZA")}
+                            </p>
+                          )}
+
+                          {task.assigned_user_name && (
+                            <p className="mt-1 text-xs text-slate-400">
+                              Assigned to: {task.assigned_user_name}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              task.status === "Completed"
+                                ? "bg-green-100 text-green-700"
+                                : isOverdue
+                                ? "bg-red-100 text-red-700"
+                                : "bg-blue-100 text-blue-700"
+                            }`}
+                          >
+                            {task.status || "Open"}
+                          </span>
+
+                          {task.priority && (
+                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                              {task.priority}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
       </div>
 
+      {showVehicleLinkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">
+                  Link Vehicle from Inventory
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Select the stock unit this customer is interested in.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowVehicleLinkModal(false)}
+                className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600 hover:bg-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-5">
+              <label className="text-sm font-medium text-slate-600">
+                Inventory Vehicle
+              </label>
+              <select
+                value={selectedInventoryVehicleId}
+                onChange={(e) =>
+                  setSelectedInventoryVehicleId(
+                    e.target.value === "" ? "" : Number(e.target.value)
+                  )
+                }
+                className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+              >
+                <option value="">Select vehicle...</option>
+                {inventoryVehicles.map((vehicle) => (
+                  <option key={vehicle.id} value={vehicle.id}>
+                    {vehicle.stock_code ? `${vehicle.stock_code} • ` : ""}
+                    {formatVehicleTitle(vehicle)} • {formatRand(vehicle.price)} •{" "}
+                    {vehicle.status || "Available"}
+                    {vehicle.linked_lead_id
+                      ? ` • Linked to Lead #${vehicle.linked_lead_id}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mt-5 max-h-80 space-y-3 overflow-y-auto rounded-xl bg-slate-50 p-4">
+              {inventoryVehicles.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-slate-500">
+                  No inventory vehicles found. Add vehicles from the Inventory
+                  page first.
+                </div>
+              ) : (
+                inventoryVehicles.slice(0, 8).map((vehicle) => (
+                  <button
+                    key={vehicle.id}
+                    onClick={() => setSelectedInventoryVehicleId(vehicle.id)}
+                    className={`w-full rounded-xl border p-4 text-left transition hover:bg-white ${
+                      selectedInventoryVehicleId === vehicle.id
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-bold text-slate-800">
+                          {formatVehicleTitle(vehicle)}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Stock: {vehicle.stock_code || "-"} • Mileage:{" "}
+                          {vehicle.mileage
+                            ? `${vehicle.mileage.toLocaleString("en-ZA")} km`
+                            : "-"}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="font-bold text-slate-900">
+                          {formatRand(vehicle.price)}
+                        </p>
+                        <span
+                          className={`mt-1 inline-block rounded-full px-3 py-1 text-xs font-semibold ${vehicleStatusBadge(
+                            vehicle.status
+                          )}`}
+                        >
+                          {vehicle.status || "Available"}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowVehicleLinkModal(false)}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+
+              <Link
+                href="/inventory"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Open Inventory
+              </Link>
+
+              <button
+                onClick={linkInventoryVehicleToLead}
+                disabled={linkingVehicle}
+                className="rounded-xl bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+              >
+                {linkingVehicle ? "Linking..." : "Link Vehicle"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCallModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-            <h2 className="text-2xl font-bold text-slate-800">
-              Call Outcome
-            </h2>
+            <h2 className="text-2xl font-bold text-slate-800">Call Outcome</h2>
 
             <div className="mt-5 space-y-3">
               {[
@@ -1108,7 +1877,9 @@ export default function LeadDetailPage() {
                 </label>
                 <select
                   value={taskAssignedUserId}
-                  onChange={(e) => setTaskAssignedUserId(Number(e.target.value))}
+                  onChange={(e) =>
+                    setTaskAssignedUserId(Number(e.target.value))
+                  }
                   className="mt-1 w-full rounded-lg border border-slate-300 p-3"
                 >
                   {salesUsers.map((user) => (

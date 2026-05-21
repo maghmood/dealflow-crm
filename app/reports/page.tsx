@@ -1,0 +1,1563 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import DashboardLayout from "@/components/DashboardLayout";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/components/AuthProvider";
+import { canAccessRole } from "@/lib/auth";
+
+type Lead = {
+  id: number;
+  customer: string | null;
+  status: string | null;
+  finance: string | null;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
+  created_at: string | null;
+};
+
+type Deal = {
+  id: number;
+  customer_name: string | null;
+  vehicle_name: string | null;
+  deal_stage: string | null;
+  finance_status: string | null;
+  sale_price: number | null;
+  deposit_amount: number | null;
+  trade_in_value: number | null;
+  settlement_amount: number | null;
+  extras_amount: number | null;
+  discount_amount: number | null;
+  assigned_user_id: number | null;
+  created_at: string | null;
+};
+
+type InventoryVehicle = {
+  id: number;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  status: string | null;
+  price: number | null;
+  created_at: string | null;
+};
+
+type FinanceApplication = {
+  id: number;
+  lead_id: number | null;
+  customer: string | null;
+  vehicle: string | null;
+  requested_amount: number | null;
+  deposit: number | null;
+  finance_status: string | null;
+  bank: string | null;
+  submitted_at: string | null;
+};
+
+type Task = {
+  id: number;
+  title: string | null;
+  status: string | null;
+  due_date: string | null;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
+  lead_id: number | null;
+};
+
+type DocumentItem = {
+  id: number;
+  lead_id: number | null;
+  deal_id: number | null;
+  vehicle_id: number | null;
+  status: string | null;
+  document_type: string | null;
+  created_at: string | null;
+};
+
+type StatusBucket = {
+  label: string;
+  count: number;
+};
+
+type SalespersonSummary = {
+  name: string;
+  userId: number | null;
+  leads: number;
+  openLeads: number;
+  deliveredLeads: number;
+  deals: number;
+  deliveredDeals: number;
+  dealValue: number;
+};
+
+type TrendMonth = {
+  key: string;
+  label: string;
+  leads: number;
+  deals: number;
+  delivered: number;
+  deliveredValue: number;
+};
+
+const DATE_FILTERS = [
+  "All Time",
+  "Today",
+  "Last 7 Days",
+  "Last 30 Days",
+  "This Month",
+];
+
+function formatRand(value: number | null | undefined) {
+  if (!value && value !== 0) return "R -";
+
+  return `R ${Number(value).toLocaleString("en-ZA", {
+    maximumFractionDigits: 0,
+  })}`;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "-";
+
+  return new Date(value).toLocaleDateString("en-ZA", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function calculateNetDealValue(deal: Deal) {
+  const sale = Number(deal.sale_price) || 0;
+  const extras = Number(deal.extras_amount) || 0;
+  const discount = Number(deal.discount_amount) || 0;
+  const tradeIn = Number(deal.trade_in_value) || 0;
+  const settlement = Number(deal.settlement_amount) || 0;
+
+  return sale + extras - discount - tradeIn + settlement;
+}
+
+function isDateInFilter(dateValue: string | null, filter: string) {
+  if (filter === "All Time") return true;
+  if (!dateValue) return false;
+
+  const date = new Date(dateValue);
+  const now = new Date();
+
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const last7 = new Date(now);
+  last7.setDate(now.getDate() - 7);
+
+  const last30 = new Date(now);
+  last30.setDate(now.getDate() - 30);
+
+  if (filter === "Today") return date >= startOfToday;
+  if (filter === "Last 7 Days") return date >= last7;
+  if (filter === "Last 30 Days") return date >= last30;
+  if (filter === "This Month") return date >= startOfMonth;
+
+  return true;
+}
+
+function groupCount(values: Array<string | null | undefined>, fallback: string) {
+  const map = new Map<string, number>();
+
+  values.forEach((value) => {
+    const key = value || fallback;
+    map.set(key, (map.get(key) || 0) + 1);
+  });
+
+  return Array.from(map.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function percentage(value: number, total: number) {
+  if (!total) return 0;
+  return Math.round((value / total) * 100);
+}
+
+function getMonthKey(dateValue: string | null) {
+  if (!dateValue) return null;
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}`;
+}
+
+function getMonthLabel(monthKey: string) {
+  const [year, month] = monthKey.split("-").map(Number);
+
+  return new Date(year, month - 1, 1).toLocaleDateString("en-ZA", {
+    month: "short",
+    year: "2-digit",
+  });
+}
+
+function getLastSixMonthKeys() {
+  const now = new Date();
+  const keys: string[] = [];
+
+  for (let i = 5; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+    );
+  }
+
+  return keys;
+}
+
+function csvSafe(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return "";
+
+  const stringValue = String(value).replace(/"/g, '""');
+
+  return `"${stringValue}"`;
+}
+
+function downloadCsv(filename: string, rows: Array<Record<string, string | number | null | undefined>>) {
+  if (rows.length === 0) {
+    alert("No data available to export.");
+    return;
+  }
+
+  const headers = Object.keys(rows[0]);
+
+  const csvContent = [
+    headers.map(csvSafe).join(","),
+    ...rows.map((row) =>
+      headers.map((header) => csvSafe(row[header])).join(",")
+    ),
+  ].join("\n");
+
+  const blob = new Blob([csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+}
+
+function exportDateStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isFinanceApprovedDeal(deal: Deal) {
+  return (
+    deal.finance_status === "Approved" ||
+    deal.finance_status === "Paid Out" ||
+    deal.deal_stage === "Finance Approved" ||
+    deal.deal_stage === "Ready for Delivery" ||
+    deal.deal_stage === "Delivered"
+  );
+}
+
+export default function ReportsPage() {
+  const { profile } = useAuth();
+
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [vehicles, setVehicles] = useState<InventoryVehicle[]>([]);
+  const [financeApplications, setFinanceApplications] = useState<
+    FinanceApplication[]
+  >([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+
+  const [loading, setLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState("All Time");
+
+function exportFullReportPdf() {
+  window.print();
+}
+
+  async function fetchReportsData() {
+    if (!profile?.company_id) return;
+
+    setLoading(true);
+
+    const [
+      leadsResult,
+      dealsResult,
+      inventoryResult,
+      financeResult,
+      tasksResult,
+      documentsResult,
+    ] = await Promise.all([
+      supabase
+        .from("leads")
+        .select(
+          "id, customer, status, finance, assigned_user_id, assigned_user_name, created_at"
+        )
+        .eq("company_id", profile.company_id)
+        .order("created_at", { ascending: false }),
+
+      supabase
+        .from("deals")
+        .select(
+          "id, customer_name, vehicle_name, deal_stage, finance_status, sale_price, deposit_amount, trade_in_value, settlement_amount, extras_amount, discount_amount, assigned_user_id, created_at"
+        )
+        .eq("company_id", profile.company_id)
+        .order("created_at", { ascending: false }),
+
+      supabase
+        .from("inventory_vehicles")
+        .select("id, make, model, year, status, price, created_at")
+        .eq("company_id", profile.company_id)
+        .order("created_at", { ascending: false }),
+
+      supabase
+        .from("finance_applications")
+        .select(
+          "id, lead_id, customer, vehicle, requested_amount, deposit, finance_status, bank, submitted_at"
+        )
+        .eq("company_id", profile.company_id)
+        .order("id", { ascending: false }),
+
+      supabase
+        .from("tasks")
+        .select(
+          "id, title, status, due_date, assigned_user_id, assigned_user_name, lead_id"
+        )
+        .eq("company_id", profile.company_id)
+        .order("due_date", { ascending: true }),
+
+      supabase
+        .from("finance_documents")
+        .select(
+          "id, lead_id, deal_id, vehicle_id, status, document_type, created_at"
+        )
+        .eq("company_id", profile.company_id)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (leadsResult.error) {
+      console.error("Error loading leads report:", leadsResult.error.message);
+      setLeads([]);
+    } else {
+      setLeads(Array.isArray(leadsResult.data) ? leadsResult.data : []);
+    }
+
+    if (dealsResult.error) {
+      console.error("Error loading deals report:", dealsResult.error.message);
+      setDeals([]);
+    } else {
+      setDeals(Array.isArray(dealsResult.data) ? dealsResult.data : []);
+    }
+
+    if (inventoryResult.error) {
+      console.error(
+        "Error loading inventory report:",
+        inventoryResult.error.message
+      );
+      setVehicles([]);
+    } else {
+      setVehicles(
+        Array.isArray(inventoryResult.data) ? inventoryResult.data : []
+      );
+    }
+
+    if (financeResult.error) {
+      console.error(
+        "Error loading finance report:",
+        financeResult.error.message
+      );
+      setFinanceApplications([]);
+    } else {
+      setFinanceApplications(
+        Array.isArray(financeResult.data) ? financeResult.data : []
+      );
+    }
+
+    if (tasksResult.error) {
+      console.error("Error loading tasks report:", tasksResult.error.message);
+      setTasks([]);
+    } else {
+      setTasks(Array.isArray(tasksResult.data) ? tasksResult.data : []);
+    }
+
+    if (documentsResult.error) {
+      console.error(
+        "Error loading documents report:",
+        documentsResult.error.message
+      );
+      setDocuments([]);
+    } else {
+      setDocuments(
+        Array.isArray(documentsResult.data) ? documentsResult.data : []
+      );
+    }
+
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    fetchReportsData();
+  }, [profile?.company_id]);
+
+  const filteredLeads = useMemo(
+    () => leads.filter((item) => isDateInFilter(item.created_at, dateFilter)),
+    [leads, dateFilter]
+  );
+
+  const filteredDeals = useMemo(
+    () => deals.filter((item) => isDateInFilter(item.created_at, dateFilter)),
+    [deals, dateFilter]
+  );
+
+  const filteredVehicles = useMemo(
+    () =>
+      vehicles.filter((item) => isDateInFilter(item.created_at, dateFilter)),
+    [vehicles, dateFilter]
+  );
+
+  const filteredFinance = useMemo(
+    () =>
+      financeApplications.filter((item) =>
+        isDateInFilter(item.submitted_at, dateFilter)
+      ),
+    [financeApplications, dateFilter]
+  );
+
+  const filteredDocuments = useMemo(
+    () =>
+      documents.filter((item) => isDateInFilter(item.created_at, dateFilter)),
+    [documents, dateFilter]
+  );
+
+  const now = new Date();
+
+  const totalLeads = filteredLeads.length;
+
+  const openLeads = filteredLeads.filter(
+    (lead) =>
+      lead.status !== "Lost" &&
+      lead.status !== "Delivered" &&
+      lead.status !== "Deal Closed"
+  ).length;
+
+  const totalDeals = filteredDeals.length;
+
+  const deliveredDeals = filteredDeals.filter(
+    (deal) => deal.deal_stage === "Delivered"
+  ).length;
+
+  const lostDeals = filteredDeals.filter(
+    (deal) => deal.deal_stage === "Lost"
+  ).length;
+
+  const financeApprovedDeals = filteredDeals.filter(isFinanceApprovedDeal).length;
+
+  const pipelineDeals = filteredDeals.filter(
+    (deal) => deal.deal_stage !== "Delivered" && deal.deal_stage !== "Lost"
+  );
+
+  const pipelineValue = pipelineDeals.reduce(
+    (sum, deal) => sum + calculateNetDealValue(deal),
+    0
+  );
+
+  const deliveredValue = filteredDeals
+    .filter((deal) => deal.deal_stage === "Delivered")
+    .reduce((sum, deal) => sum + calculateNetDealValue(deal), 0);
+
+  const financeApproved = filteredFinance.filter(
+    (finance) => finance.finance_status === "Approved"
+  ).length;
+
+  const financeSubmitted = filteredFinance.filter(
+    (finance) =>
+      finance.finance_status === "Submitted" || !finance.finance_status
+  ).length;
+
+  const availableVehicles = filteredVehicles.filter(
+    (vehicle) => vehicle.status === "Available"
+  ).length;
+
+  const reservedVehicles = filteredVehicles.filter(
+    (vehicle) => vehicle.status === "Reserved"
+  ).length;
+
+  const stockValue = filteredVehicles.reduce(
+    (sum, vehicle) => sum + (Number(vehicle.price) || 0),
+    0
+  );
+
+  const overdueTasks = tasks.filter((task) => {
+    if (!task.due_date || task.status === "Completed") return false;
+    return new Date(task.due_date) < now;
+  }).length;
+
+  const openTasks = tasks.filter((task) => task.status !== "Completed").length;
+
+  const leadStatusBuckets = groupCount(
+    filteredLeads.map((lead) => lead.status),
+    "New Lead"
+  );
+
+  const dealStageBuckets = groupCount(
+    filteredDeals.map((deal) => deal.deal_stage),
+    "Draft"
+  );
+
+  const financeStatusBuckets = groupCount(
+    filteredFinance.map((finance) => finance.finance_status),
+    "Submitted"
+  );
+
+  const inventoryStatusBuckets = groupCount(
+    filteredVehicles.map((vehicle) => vehicle.status),
+    "Available"
+  );
+
+  const documentStatusBuckets = groupCount(
+    filteredDocuments.map((doc) => doc.status),
+    "Pending"
+  );
+
+  const conversionLeadToDeal = percentage(totalDeals, totalLeads);
+  const conversionDealToFinance = percentage(financeApprovedDeals, totalDeals);
+  const conversionFinanceToDelivered = percentage(
+    deliveredDeals,
+    financeApprovedDeals
+  );
+  const conversionLeadToDelivered = percentage(deliveredDeals, totalLeads);
+
+  const monthlyTrend = useMemo(() => {
+    const keys = getLastSixMonthKeys();
+
+    const baseMap = new Map<string, TrendMonth>();
+
+    keys.forEach((key) => {
+      baseMap.set(key, {
+        key,
+        label: getMonthLabel(key),
+        leads: 0,
+        deals: 0,
+        delivered: 0,
+        deliveredValue: 0,
+      });
+    });
+
+    leads.forEach((lead) => {
+      const key = getMonthKey(lead.created_at);
+      if (!key || !baseMap.has(key)) return;
+
+      baseMap.get(key)!.leads += 1;
+    });
+
+    deals.forEach((deal) => {
+      const key = getMonthKey(deal.created_at);
+      if (!key || !baseMap.has(key)) return;
+
+      const month = baseMap.get(key)!;
+
+      month.deals += 1;
+
+      if (deal.deal_stage === "Delivered") {
+        month.delivered += 1;
+        month.deliveredValue += calculateNetDealValue(deal);
+      }
+    });
+
+    return keys.map((key) => baseMap.get(key)!);
+  }, [leads, deals]);
+
+  const maxTrendValue = Math.max(
+    ...monthlyTrend.map((month) =>
+      Math.max(month.leads, month.deals, month.delivered)
+    ),
+    1
+  );
+
+  const salespersonSummaries = useMemo(() => {
+    const map = new Map<string, SalespersonSummary>();
+
+    filteredLeads.forEach((lead) => {
+      const key = String(
+        lead.assigned_user_id || lead.assigned_user_name || "Unassigned"
+      );
+
+      if (!map.has(key)) {
+        map.set(key, {
+          name: lead.assigned_user_name || "Unassigned",
+          userId: lead.assigned_user_id,
+          leads: 0,
+          openLeads: 0,
+          deliveredLeads: 0,
+          deals: 0,
+          deliveredDeals: 0,
+          dealValue: 0,
+        });
+      }
+
+      const summary = map.get(key)!;
+      summary.leads += 1;
+
+      if (
+        lead.status !== "Lost" &&
+        lead.status !== "Delivered" &&
+        lead.status !== "Deal Closed"
+      ) {
+        summary.openLeads += 1;
+      }
+
+      if (lead.status === "Delivered" || lead.status === "Deal Closed") {
+        summary.deliveredLeads += 1;
+      }
+    });
+
+    filteredDeals.forEach((deal) => {
+      const key = String(deal.assigned_user_id || "Unassigned");
+
+      if (!map.has(key)) {
+        map.set(key, {
+          name:
+            filteredLeads.find(
+              (lead) => lead.assigned_user_id === deal.assigned_user_id
+            )?.assigned_user_name || "Unassigned",
+          userId: deal.assigned_user_id,
+          leads: 0,
+          openLeads: 0,
+          deliveredLeads: 0,
+          deals: 0,
+          deliveredDeals: 0,
+          dealValue: 0,
+        });
+      }
+
+      const summary = map.get(key)!;
+      summary.deals += 1;
+      summary.dealValue += calculateNetDealValue(deal);
+
+      if (deal.deal_stage === "Delivered") {
+        summary.deliveredDeals += 1;
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.dealValue - a.dealValue);
+  }, [filteredLeads, filteredDeals]);
+
+function exportLeadsCsv() {
+  downloadCsv(
+    `dealflow-leads-report-${exportDateStamp()}.csv`,
+    filteredLeads.map((lead) => ({
+      "Lead ID": lead.id,
+      Customer: lead.customer || "",
+      Status: lead.status || "New Lead",
+      Finance: lead.finance || "",
+      "Assigned User": lead.assigned_user_name || "Unassigned",
+      "Created Date": lead.created_at ? formatDate(lead.created_at) : "",
+    }))
+  );
+}
+
+function exportDealsCsv() {
+  downloadCsv(
+    `dealflow-deals-report-${exportDateStamp()}.csv`,
+    filteredDeals.map((deal) => ({
+      "Deal ID": deal.id,
+      Customer: deal.customer_name || "",
+      Vehicle: deal.vehicle_name || "",
+      Stage: deal.deal_stage || "Draft",
+      "Finance Status": deal.finance_status || "Not Started",
+      "Sale Price": Number(deal.sale_price) || 0,
+      "Deposit": Number(deal.deposit_amount) || 0,
+      "Trade-In Value": Number(deal.trade_in_value) || 0,
+      "Settlement Amount": Number(deal.settlement_amount) || 0,
+      Extras: Number(deal.extras_amount) || 0,
+      Discount: Number(deal.discount_amount) || 0,
+      "Net Deal Value": calculateNetDealValue(deal),
+      "Created Date": deal.created_at ? formatDate(deal.created_at) : "",
+    }))
+  );
+}
+
+function exportFinanceCsv() {
+  downloadCsv(
+    `dealflow-finance-report-${exportDateStamp()}.csv`,
+    filteredFinance.map((finance) => ({
+      "Finance ID": finance.id,
+      "Lead ID": finance.lead_id || "",
+      Customer: finance.customer || "",
+      Vehicle: finance.vehicle || "",
+      Bank: finance.bank || "",
+      Status: finance.finance_status || "Submitted",
+      "Requested Amount": Number(finance.requested_amount) || 0,
+      Deposit: Number(finance.deposit) || 0,
+      "Submitted Date": finance.submitted_at
+        ? formatDate(finance.submitted_at)
+        : "",
+    }))
+  );
+}
+
+function exportSalespersonCsv() {
+  downloadCsv(
+    `dealflow-salesperson-performance-${exportDateStamp()}.csv`,
+    salespersonSummaries.map((person) => ({
+      Salesperson: person.name,
+      Leads: person.leads,
+      "Open Leads": person.openLeads,
+      "Delivered Leads": person.deliveredLeads,
+      Deals: person.deals,
+      "Delivered Deals": person.deliveredDeals,
+      "Deal Value": person.dealValue,
+      "Lead to Deal %": percentage(person.deals, person.leads),
+      "Deal to Delivered %": percentage(person.deliveredDeals, person.deals),
+    }))
+  );
+}
+
+  const recentDeliveredDeals = filteredDeals
+    .filter((deal) => deal.deal_stage === "Delivered")
+    .slice(0, 5);
+
+  if (!canAccessRole(profile?.role, "reports")) {
+    return (
+      <DashboardLayout>
+        <div className="rounded-2xl bg-white p-10 shadow-sm ring-1 ring-slate-200">
+          <h1 className="text-2xl font-bold text-slate-900">Access Denied</h1>
+          <p className="mt-2 text-slate-500">
+            You do not have permission to access reporting.
+          </p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Reports</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Dealership performance, pipeline, finance and operational
+              reporting.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row no-print">
+  <select
+    value={dateFilter}
+    onChange={(e) => setDateFilter(e.target.value)}
+    className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+  >
+    {DATE_FILTERS.map((filter) => (
+      <option key={filter}>{filter}</option>
+    ))}
+  </select>
+
+  <button
+    onClick={fetchReportsData}
+    className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
+  >
+    Refresh
+  </button>
+
+  <button
+    onClick={exportFullReportPdf}
+    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500"
+  >
+    Export PDF
+  </button>
+</div>
+
+<div className="no-print rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+    <div>
+      <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+        Export Reports
+      </h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Download filtered report data based on the selected period: {dateFilter}.
+      </p>
+    </div>
+
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <button
+        onClick={exportLeadsCsv}
+        className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+      >
+        Export Leads
+      </button>
+
+      <button
+        onClick={exportDealsCsv}
+        className="rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-100"
+      >
+        Export Deals
+      </button>
+
+      <button
+        onClick={exportFinanceCsv}
+        className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-100"
+      >
+        Export Finance
+      </button>
+
+      <button
+        onClick={exportSalespersonCsv}
+        className="rounded-xl border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-100"
+      >
+        Export Salespeople
+      </button>
+    </div>
+  </div>
+</div>
+        </div>
+
+       {loading ? (
+  <div className="rounded-2xl bg-white p-8 text-slate-500 shadow-sm ring-1 ring-slate-200">
+    Loading reports...
+  </div>
+) : (
+  <div id="report-print-area" className="space-y-6">
+            <div
+              className="grid gap-4"
+              style={{
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              }}
+            >
+              <MetricCard label="Total Leads" value={totalLeads} />
+              <MetricCard label="Open Leads" value={openLeads} color="blue" />
+              <MetricCard label="Deals Created" value={totalDeals} />
+              <MetricCard
+                label="Delivered Deals"
+                value={deliveredDeals}
+                color="green"
+              />
+              <MetricCard
+                label="Pipeline Value"
+                value={formatRand(pipelineValue)}
+                color="orange"
+              />
+              <MetricCard
+                label="Delivered Value"
+                value={formatRand(deliveredValue)}
+                color="green"
+              />
+              <MetricCard
+                label="Finance Approved"
+                value={financeApproved}
+                color="green"
+              />
+              <MetricCard
+                label="Overdue Tasks"
+                value={overdueTasks}
+                color="red"
+              />
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+              <div className="print-section rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">
+                      Lead to Delivery Conversion Funnel
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Shows how leads move through deals, finance approval and
+                      delivery.
+                    </p>
+                  </div>
+
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                    {dateFilter}
+                  </span>
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  <FunnelStep
+                    label="Total Leads"
+                    value={totalLeads}
+                    total={totalLeads}
+                    description="Starting lead pool"
+                    color="blue"
+                  />
+
+                  <FunnelStep
+                    label="Deals Created"
+                    value={totalDeals}
+                    total={totalLeads}
+                    description={`${conversionLeadToDeal}% of leads converted into deals`}
+                    color="green"
+                  />
+
+                  <FunnelStep
+                    label="Finance Approved Deals"
+                    value={financeApprovedDeals}
+                    total={totalDeals}
+                    description={`${conversionDealToFinance}% of deals reached finance approval`}
+                    color="orange"
+                  />
+
+                  <FunnelStep
+                    label="Delivered Deals"
+                    value={deliveredDeals}
+                    total={financeApprovedDeals}
+                    description={`${conversionFinanceToDelivered}% of finance-approved deals delivered`}
+                    color="purple"
+                  />
+                </div>
+
+                <div className="mt-6 grid gap-3 md:grid-cols-2">
+                  <ConversionCard
+                    label="Lead → Deal"
+                    value={`${conversionLeadToDeal}%`}
+                  />
+                  <ConversionCard
+                    label="Deal → Finance Approved"
+                    value={`${conversionDealToFinance}%`}
+                  />
+                  <ConversionCard
+                    label="Finance Approved → Delivered"
+                    value={`${conversionFinanceToDelivered}%`}
+                  />
+                  <ConversionCard
+                    label="Lead → Delivered"
+                    value={`${conversionLeadToDelivered}%`}
+                  />
+                </div>
+              </div>
+
+              <div className="print-section rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">
+                      6-Month Activity Trend
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Monthly leads, deals and delivered deals.
+                    </p>
+                  </div>
+
+                  <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
+                    Live data
+                  </span>
+                </div>
+
+                <div className="mt-6 space-y-5">
+                  {monthlyTrend.map((month) => (
+                    <div key={month.key}>
+                      <div className="mb-2 flex items-center justify-between">
+                        <p className="text-sm font-bold text-slate-800">
+                          {month.label}
+                        </p>
+                        <p className="text-xs font-semibold text-slate-500">
+                          Delivered value: {formatRand(month.deliveredValue)}
+                        </p>
+                      </div>
+
+                      <TrendBar
+                        label="Leads"
+                        value={month.leads}
+                        max={maxTrendValue}
+                        color="blue"
+                      />
+
+                      <TrendBar
+                        label="Deals"
+                        value={month.deals}
+                        max={maxTrendValue}
+                        color="green"
+                      />
+
+                      <TrendBar
+                        label="Delivered"
+                        value={month.delivered}
+                        max={maxTrendValue}
+                        color="purple"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-4">
+              <ReportCard title="Leads by Status">
+                <BucketList buckets={leadStatusBuckets} total={totalLeads} />
+              </ReportCard>
+
+              <ReportCard title="Deals by Stage">
+                <BucketList buckets={dealStageBuckets} total={totalDeals} />
+              </ReportCard>
+
+              <ReportCard title="Finance by Status">
+                <BucketList
+                  buckets={financeStatusBuckets}
+                  total={filteredFinance.length}
+                />
+              </ReportCard>
+
+              <ReportCard title="Inventory by Status">
+                <BucketList
+                  buckets={inventoryStatusBuckets}
+                  total={filteredVehicles.length}
+                />
+              </ReportCard>
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+              <div className="print-section print-page rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">
+                      Salesperson Performance
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Lead ownership, deal count and delivered deal value.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 overflow-x-auto">
+                  <table className="min-w-[850px]">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+                          Salesperson
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+                          Leads
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+                          Open Leads
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+                          Deals
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+                          Delivered
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+                          Deal Value
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {salespersonSummaries.map((person) => (
+                        <tr
+                          key={`${person.userId}-${person.name}`}
+                          className="border-t border-slate-100"
+                        >
+                          <td className="px-4 py-4">
+                            <p className="font-semibold text-slate-900">
+                              {person.name}
+                            </p>
+                          </td>
+                          <td className="px-4 py-4 text-slate-700">
+                            {person.leads}
+                          </td>
+                          <td className="px-4 py-4 text-slate-700">
+                            {person.openLeads}
+                          </td>
+                          <td className="px-4 py-4 text-slate-700">
+                            {person.deals}
+                          </td>
+                          <td className="px-4 py-4 text-slate-700">
+                            {person.deliveredDeals}
+                          </td>
+                          <td className="px-4 py-4 font-bold text-slate-900">
+                            {formatRand(person.dealValue)}
+                          </td>
+                        </tr>
+                      ))}
+
+                      {salespersonSummaries.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="px-4 py-8 text-center text-slate-500"
+                          >
+                            No salesperson data found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <ReportCard title="Operational Snapshot">
+                  <div className="space-y-3">
+                    <SnapshotRow label="Open Tasks" value={openTasks} />
+                    <SnapshotRow label="Overdue Tasks" value={overdueTasks} />
+                    <SnapshotRow
+                      label="Available Vehicles"
+                      value={availableVehicles}
+                    />
+                    <SnapshotRow
+                      label="Reserved Vehicles"
+                      value={reservedVehicles}
+                    />
+                    <SnapshotRow
+                      label="Stock Value"
+                      value={formatRand(stockValue)}
+                    />
+                    <SnapshotRow
+                      label="Finance Submitted"
+                      value={financeSubmitted}
+                    />
+                    <SnapshotRow label="Lost Deals" value={lostDeals} />
+                  </div>
+                </ReportCard>
+
+                <ReportCard title="Documents by Status">
+                  <BucketList
+                    buckets={documentStatusBuckets}
+                    total={filteredDocuments.length}
+                  />
+                </ReportCard>
+              </div>
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+              <div className="print-section rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                <h2 className="text-lg font-bold text-slate-900">
+                  Recent Delivered Deals
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Latest completed deals in the selected period.
+                </p>
+
+                <div className="mt-5 space-y-3">
+                  {recentDeliveredDeals.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                      <p className="text-sm font-semibold text-slate-700">
+                        No delivered deals found.
+                      </p>
+                    </div>
+                  ) : (
+                    recentDeliveredDeals.map((deal) => (
+                      <div
+                        key={deal.id}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">
+                              Deal #{deal.id}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {deal.customer_name || "Unknown customer"}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400">
+                              {deal.vehicle_name || "No vehicle"} •{" "}
+                              {formatDate(deal.created_at)}
+                            </p>
+                          </div>
+
+                          <p className="text-sm font-extrabold text-green-700">
+                            {formatRand(calculateNetDealValue(deal))}
+                          </p>
+                        </div>
+
+                        <Link
+                          href={`/deals/${deal.id}`}
+                          className="mt-4 inline-flex rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
+                        >
+                          Open Deal
+                        </Link>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="print-section rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                <h2 className="text-lg font-bold text-slate-900">
+                  Report Notes
+                </h2>
+
+                <div className="mt-5 space-y-4 text-sm leading-6 text-slate-600">
+                  <p>
+                    This reporting page reads directly from your existing CRM
+                    tables. It does not create or change any data.
+                  </p>
+
+                  <p>
+                    The date filter applies to the created/submitted date for
+                    leads, deals, inventory, finance applications and documents.
+                    Task counts are shown as current operational totals.
+                  </p>
+
+                  <p>
+                    The conversion funnel compares total leads, deals created,
+                    finance-approved deals and delivered deals in the selected
+                    period. The 6-month trend always shows recent monthly
+                    activity from live CRM data.
+                  </p>
+                </div>
+              </div>
+            </div>
+            </div>
+)}
+      </div>
+
+<style jsx global>{`
+  @media print {
+    @page {
+      size: A4 landscape;
+      margin: 8mm;
+    }
+
+    html,
+    body {
+      width: 100%;
+      background: white !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    aside,
+    header,
+    .no-print {
+      display: none !important;
+    }
+
+    main {
+      padding: 0 !important;
+      margin: 0 !important;
+      background: white !important;
+    }
+
+    #report-print-area {
+      padding: 0 !important;
+      margin: 0 !important;
+      background: white !important;
+    }
+
+    #report-print-area > div {
+      margin-bottom: 10px !important;
+    }
+
+    .print-section {
+      break-inside: avoid-page !important;
+      page-break-inside: avoid !important;
+      -webkit-column-break-inside: avoid !important;
+      page-break-before: auto;
+      overflow: visible !important;
+    }
+
+    .print-page {
+      break-before: page !important;
+      page-break-before: always !important;
+    }
+
+    #report-print-area .grid {
+      display: grid !important;
+    }
+
+    #report-print-area .rounded-2xl {
+      border-radius: 10px !important;
+    }
+
+    #report-print-area .shadow-sm,
+    #report-print-area .shadow,
+    #report-print-area .shadow-xl,
+    #report-print-area .shadow-2xl {
+      box-shadow: none !important;
+    }
+
+    #report-print-area .ring-1 {
+      box-shadow: 0 0 0 1px #e2e8f0 !important;
+    }
+
+    #report-print-area table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      font-size: 10px !important;
+    }
+
+    #report-print-area thead {
+      display: table-header-group !important;
+    }
+
+    #report-print-area tr {
+      break-inside: avoid-page !important;
+      page-break-inside: avoid !important;
+    }
+
+    #report-print-area th,
+    #report-print-area td {
+      padding: 5px 7px !important;
+      border-bottom: 1px solid #e2e8f0 !important;
+      vertical-align: top !important;
+    }
+
+    #report-print-area h1 {
+      font-size: 20px !important;
+    }
+
+    #report-print-area h2 {
+      font-size: 14px !important;
+    }
+
+    #report-print-area p,
+    #report-print-area span,
+    #report-print-area td,
+    #report-print-area th {
+      line-height: 1.25 !important;
+    }
+
+    #report-print-area a {
+      text-decoration: none !important;
+      color: inherit !important;
+    }
+
+    #report-print-area button,
+    #report-print-area select {
+      display: none !important;
+    }
+
+    #report-print-area .xl\\:grid-cols-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+
+    #report-print-area .xl\\:grid-cols-\\[1fr_1fr\\] {
+      grid-template-columns: 1fr 1fr !important;
+    }
+
+    #report-print-area .xl\\:grid-cols-\\[1\\.2fr_0\\.8fr\\] {
+      grid-template-columns: 1.2fr 0.8fr !important;
+    }
+
+    #report-print-area .xl\\:grid-cols-\\[0\\.9fr_1\\.1fr\\] {
+      grid-template-columns: 0.9fr 1.1fr !important;
+    }
+  }
+`}</style>
+
+    </DashboardLayout>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string | number;
+  color?: "blue" | "green" | "orange" | "red";
+}) {
+  const colorClass =
+    color === "blue"
+      ? "text-blue-700"
+      : color === "green"
+      ? "text-green-700"
+      : color === "orange"
+      ? "text-orange-700"
+      : color === "red"
+      ? "text-red-700"
+      : "text-slate-900";
+
+  return (
+    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <p className="text-sm text-slate-500">{label}</p>
+      <h2 className={`mt-2 truncate text-2xl font-extrabold ${colorClass}`}>
+        {value}
+      </h2>
+    </div>
+  );
+}
+
+function ReportCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="print-section rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+      <div className="mt-5">{children}</div>
+    </div>
+  );
+}
+
+function BucketList({
+  buckets,
+  total,
+}: {
+  buckets: StatusBucket[];
+  total: number;
+}) {
+  if (buckets.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+        <p className="text-sm font-semibold text-slate-700">No data found</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {buckets.map((bucket) => {
+        const pct = percentage(bucket.count, total);
+
+        return (
+          <div key={bucket.label}>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-semibold text-slate-700">
+                {bucket.label}
+              </p>
+              <p className="text-sm font-bold text-slate-900">
+                {bucket.count}
+              </p>
+            </div>
+
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-slate-900"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+
+            <p className="mt-1 text-xs text-slate-400">{pct}%</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SnapshotRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+      <span className="text-sm font-medium text-slate-500">{label}</span>
+      <span className="text-sm font-bold text-slate-900">{value}</span>
+    </div>
+  );
+}
+
+function FunnelStep({
+  label,
+  value,
+  total,
+  description,
+  color,
+}: {
+  label: string;
+  value: number;
+  total: number;
+  description: string;
+  color: "blue" | "green" | "orange" | "purple";
+}) {
+  const pct = percentage(value, total);
+
+  const colorClass =
+    color === "blue"
+      ? "bg-blue-600"
+      : color === "green"
+      ? "bg-green-600"
+      : color === "orange"
+      ? "bg-orange-500"
+      : "bg-purple-600";
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-slate-900">{label}</p>
+          <p className="text-xs text-slate-500">{description}</p>
+        </div>
+
+        <p className="text-lg font-extrabold text-slate-900">{value}</p>
+      </div>
+
+      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full ${colorClass}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      <p className="mt-1 text-xs font-semibold text-slate-400">{pct}%</p>
+    </div>
+  );
+}
+
+function ConversionCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1 text-2xl font-extrabold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function TrendBar({
+  label,
+  value,
+  max,
+  color,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  color: "blue" | "green" | "purple";
+}) {
+  const width = Math.max(percentage(value, max), value > 0 ? 6 : 0);
+
+  const colorClass =
+    color === "blue"
+      ? "bg-blue-500"
+      : color === "green"
+      ? "bg-green-500"
+      : "bg-purple-500";
+
+  return (
+    <div className="mb-2 grid grid-cols-[80px_1fr_40px] items-center gap-3">
+      <span className="text-xs font-semibold text-slate-500">{label}</span>
+
+      <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full ${colorClass}`}
+          style={{ width: `${width}%` }}
+        />
+      </div>
+
+      <span className="text-right text-xs font-bold text-slate-700">
+        {value}
+      </span>
+    </div>
+  );
+}
