@@ -5,7 +5,7 @@ import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
-import { canAccessRole } from "@/lib/auth";
+
 
 type Lead = {
   id: number;
@@ -75,6 +75,24 @@ type DocumentItem = {
   created_at: string | null;
 };
 
+type CallLog = {
+  id: number;
+  company_id: number;
+  lead_id: number;
+  user_profile_id: number | null;
+  user_name: string | null;
+  phone_number: string | null;
+  direction: "Outbound" | "Inbound";
+  outcome: string;
+  notes: string | null;
+  called_at: string;
+  duration_seconds: number | null;
+  follow_up_required: boolean;
+  follow_up_date: string | null;
+  follow_up_task_id: number | null;
+  created_at: string;
+};
+
 type StatusBucket = {
   label: string;
   count: number;
@@ -89,6 +107,9 @@ type SalespersonSummary = {
   deals: number;
   deliveredDeals: number;
   dealValue: number;
+  calls: number;
+  answeredCalls: number;
+  callbacksRequired: number;
 };
 
 type TrendMonth = {
@@ -280,7 +301,7 @@ export default function ReportsPage() {
   >([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
-
+const [callLogs, setCallLogs] = useState<CallLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState("All Time");
 
@@ -294,13 +315,14 @@ function exportFullReportPdf() {
     setLoading(true);
 
     const [
-      leadsResult,
-      dealsResult,
-      inventoryResult,
-      financeResult,
-      tasksResult,
-      documentsResult,
-    ] = await Promise.all([
+  leadsResult,
+  dealsResult,
+  inventoryResult,
+  financeResult,
+  tasksResult,
+  documentsResult,
+  callLogsResult,
+] = await Promise.all([
       supabase
         .from("leads")
         .select(
@@ -346,6 +368,15 @@ function exportFullReportPdf() {
         )
         .eq("company_id", profile.company_id)
         .order("created_at", { ascending: false }),
+
+      supabase
+  .from("call_logs")
+  .select(
+    "id, company_id, lead_id, user_profile_id, user_name, phone_number, direction, outcome, notes, called_at, duration_seconds, follow_up_required, follow_up_date, follow_up_task_id, created_at"
+  )
+  .eq("company_id", profile.company_id)
+  .order("called_at", { ascending: false }),  
+
     ]);
 
     if (leadsResult.error) {
@@ -393,17 +424,29 @@ function exportFullReportPdf() {
       setTasks(Array.isArray(tasksResult.data) ? tasksResult.data : []);
     }
 
-    if (documentsResult.error) {
-      console.error(
-        "Error loading documents report:",
-        documentsResult.error.message
-      );
-      setDocuments([]);
-    } else {
-      setDocuments(
-        Array.isArray(documentsResult.data) ? documentsResult.data : []
-      );
-    }
+   if (documentsResult.error) {
+  console.error(
+    "Error loading documents report:",
+    documentsResult.error.message
+  );
+  setDocuments([]);
+} else {
+  setDocuments(
+    Array.isArray(documentsResult.data) ? documentsResult.data : []
+  );
+}
+
+if (callLogsResult.error) {
+  console.error(
+    "Error loading call logs report:",
+    callLogsResult.error.message
+  );
+  setCallLogs([]);
+} else {
+  setCallLogs(
+    Array.isArray(callLogsResult.data) ? callLogsResult.data : []
+  );
+}
 
     setLoading(false);
   }
@@ -442,6 +485,14 @@ function exportFullReportPdf() {
     [documents, dateFilter]
   );
 
+const filteredCallLogs = useMemo(
+  () =>
+    callLogs.filter((item) =>
+      isDateInFilter(item.called_at, dateFilter)
+    ),
+  [callLogs, dateFilter]
+);
+  
   const now = new Date();
 
   const totalLeads = filteredLeads.length;
@@ -506,6 +557,29 @@ function exportFullReportPdf() {
   }).length;
 
   const openTasks = tasks.filter((task) => task.status !== "Completed").length;
+const totalCalls = filteredCallLogs.length;
+
+const answeredCalls = filteredCallLogs.filter(
+  (call) => call.outcome === "Answered"
+).length;
+
+const answeredRate = percentage(answeredCalls, totalCalls);
+
+const callbacksRequired = filteredCallLogs.filter(
+  (call) => call.follow_up_required
+).length;
+
+const pendingCallbacks = filteredCallLogs.filter((call) => {
+  if (!call.follow_up_required || !call.follow_up_date) return false;
+
+  return new Date(call.follow_up_date) >= new Date();
+}).length;
+
+const overdueCallbacks = filteredCallLogs.filter((call) => {
+  if (!call.follow_up_required || !call.follow_up_date) return false;
+
+  return new Date(call.follow_up_date) < new Date();
+}).length;
 
   const leadStatusBuckets = groupCount(
     filteredLeads.map((lead) => lead.status),
@@ -531,6 +605,11 @@ function exportFullReportPdf() {
     filteredDocuments.map((doc) => doc.status),
     "Pending"
   );
+
+const callOutcomeBuckets = groupCount(
+  filteredCallLogs.map((call) => call.outcome),
+  "Unknown"
+);
 
   const conversionLeadToDeal = percentage(totalDeals, totalLeads);
   const conversionDealToFinance = percentage(financeApprovedDeals, totalDeals);
@@ -605,6 +684,9 @@ function exportFullReportPdf() {
           deals: 0,
           deliveredDeals: 0,
           dealValue: 0,
+          calls: 0,
+answeredCalls: 0,
+callbacksRequired: 0,
         });
       }
 
@@ -640,6 +722,9 @@ function exportFullReportPdf() {
           deals: 0,
           deliveredDeals: 0,
           dealValue: 0,
+          calls: 0,
+answeredCalls: 0,
+callbacksRequired: 0,
         });
       }
 
@@ -652,8 +737,42 @@ function exportFullReportPdf() {
       }
     });
 
+filteredCallLogs.forEach((call) => {
+  const key = String(
+    call.user_profile_id || call.user_name || "Unassigned"
+  );
+
+  if (!map.has(key)) {
+    map.set(key, {
+      name: call.user_name || "Unassigned",
+      userId: call.user_profile_id,
+      leads: 0,
+      openLeads: 0,
+      deliveredLeads: 0,
+      deals: 0,
+      deliveredDeals: 0,
+      dealValue: 0,
+      calls: 0,
+      answeredCalls: 0,
+      callbacksRequired: 0,
+    });
+  }
+
+  const summary = map.get(key)!;
+
+  summary.calls += 1;
+
+  if (call.outcome === "Answered") {
+    summary.answeredCalls += 1;
+  }
+
+  if (call.follow_up_required) {
+    summary.callbacksRequired += 1;
+  }
+});
+
     return Array.from(map.values()).sort((a, b) => b.dealValue - a.dealValue);
-  }, [filteredLeads, filteredDeals]);
+  }, [filteredLeads, filteredDeals, filteredCallLogs]);
 
 function exportLeadsCsv() {
   downloadCsv(
@@ -709,6 +828,29 @@ function exportFinanceCsv() {
   );
 }
 
+function exportCallsCsv() {
+  downloadCsv(
+    `dealflow-call-report-${exportDateStamp()}.csv`,
+    filteredCallLogs.map((call) => ({
+      "Call ID": call.id,
+      "Lead ID": call.lead_id,
+      "Logged By": call.user_name || "Unknown User",
+      "Phone Number": call.phone_number || "",
+      Direction: call.direction,
+      Outcome: call.outcome,
+      Notes: call.notes || "",
+      "Call Date": call.called_at
+        ? new Date(call.called_at).toLocaleString("en-ZA")
+        : "",
+      "Follow-Up Required": call.follow_up_required ? "Yes" : "No",
+      "Follow-Up Date": call.follow_up_date
+        ? new Date(call.follow_up_date).toLocaleString("en-ZA")
+        : "",
+      "Follow-Up Task ID": call.follow_up_task_id || "",
+    }))
+  );
+}
+
 function exportSalespersonCsv() {
   downloadCsv(
     `dealflow-salesperson-performance-${exportDateStamp()}.csv`,
@@ -720,7 +862,11 @@ function exportSalespersonCsv() {
       Deals: person.deals,
       "Delivered Deals": person.deliveredDeals,
       "Deal Value": person.dealValue,
-      "Lead to Deal %": percentage(person.deals, person.leads),
+Calls: person.calls,
+"Answered Calls": person.answeredCalls,
+"Answered Rate %": percentage(person.answeredCalls, person.calls),
+"Callbacks Required": person.callbacksRequired,
+"Lead to Deal %": percentage(person.deals, person.leads),
       "Deal to Delivered %": percentage(person.deliveredDeals, person.deals),
     }))
   );
@@ -730,18 +876,7 @@ function exportSalespersonCsv() {
     .filter((deal) => deal.deal_stage === "Delivered")
     .slice(0, 5);
 
-  if (!canAccessRole(profile?.role, "reports")) {
-    return (
-      <DashboardLayout>
-        <div className="rounded-2xl bg-white p-10 shadow-sm ring-1 ring-slate-200">
-          <h1 className="text-2xl font-bold text-slate-900">Access Denied</h1>
-          <p className="mt-2 text-slate-500">
-            You do not have permission to access reporting.
-          </p>
-        </div>
-      </DashboardLayout>
-    );
-  }
+  
 
  return (
   <DashboardLayout>
@@ -793,7 +928,7 @@ function exportSalespersonCsv() {
       </p>
     </div>
 
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
       <button
         onClick={exportLeadsCsv}
         className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
@@ -814,6 +949,13 @@ function exportSalespersonCsv() {
       >
         Export Finance
       </button>
+
+<button
+  onClick={exportCallsCsv}
+  className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-100"
+>
+  Export Calls
+</button>
 
       <button
         onClick={exportSalespersonCsv}
@@ -866,6 +1008,30 @@ function exportSalespersonCsv() {
                 value={overdueTasks}
                 color="red"
               />
+<MetricCard
+  label="Total Calls"
+  value={totalCalls}
+  color="blue"
+/>
+
+<MetricCard
+  label="Answered Calls"
+  value={answeredCalls}
+  color="green"
+/>
+
+<MetricCard
+  label="Answered Rate"
+  value={`${answeredRate}%`}
+  color="green"
+/>
+
+<MetricCard
+  label="Callbacks Required"
+  value={callbacksRequired}
+  color="orange"
+/>
+
             </div>
 
             <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
@@ -1017,7 +1183,34 @@ function exportSalespersonCsv() {
                 />
               </ReportCard>
             </div>
+<div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+  <ReportCard title="Call Outcomes">
+    <BucketList
+      buckets={callOutcomeBuckets}
+      total={filteredCallLogs.length}
+    />
+  </ReportCard>
 
+  <ReportCard title="Call Performance Snapshot">
+    <div className="space-y-3">
+      <SnapshotRow label="Total Calls" value={totalCalls} />
+      <SnapshotRow label="Answered Calls" value={answeredCalls} />
+      <SnapshotRow label="Answered Rate" value={`${answeredRate}%`} />
+      <SnapshotRow
+        label="Callbacks Required"
+        value={callbacksRequired}
+      />
+      <SnapshotRow
+        label="Upcoming Callbacks"
+        value={pendingCallbacks}
+      />
+      <SnapshotRow
+        label="Past-Due Callbacks"
+        value={overdueCallbacks}
+      />
+    </div>
+  </ReportCard>
+</div>
             <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
               <div className="print-section print-page rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center justify-between gap-3">
@@ -1032,7 +1225,7 @@ function exportSalespersonCsv() {
                 </div>
 
                 <div className="mt-5 overflow-x-auto">
-                  <table className="min-w-[850px]">
+                  <table className="min-w-[1150px]">
                     <thead className="bg-slate-50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
@@ -1050,6 +1243,17 @@ function exportSalespersonCsv() {
                         <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
                           Delivered
                         </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+  Calls
+</th>
+
+<th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+  Answered
+</th>
+
+<th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+  Answer Rate
+</th>
                         <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
                           Deal Value
                         </th>
@@ -1079,6 +1283,17 @@ function exportSalespersonCsv() {
                           <td className="px-4 py-4 text-slate-700">
                             {person.deliveredDeals}
                           </td>
+                          <td className="px-4 py-4 text-slate-700">
+  {person.calls}
+</td>
+
+<td className="px-4 py-4 text-slate-700">
+  {person.answeredCalls}
+</td>
+
+<td className="px-4 py-4 text-slate-700">
+  {percentage(person.answeredCalls, person.calls)}%
+</td>
                           <td className="px-4 py-4 font-bold text-slate-900">
                             {formatRand(person.dealValue)}
                           </td>
@@ -1088,7 +1303,7 @@ function exportSalespersonCsv() {
                       {salespersonSummaries.length === 0 && (
                         <tr>
                           <td
-                            colSpan={6}
+                            colSpan={9}
                             className="px-4 py-8 text-center text-slate-500"
                           >
                             No salesperson data found.
@@ -1109,6 +1324,12 @@ function exportSalespersonCsv() {
                       label="Available Vehicles"
                       value={availableVehicles}
                     />
+                    <SnapshotRow label="Total Calls" value={totalCalls} />
+<SnapshotRow label="Answered Rate" value={`${answeredRate}%`} />
+<SnapshotRow
+  label="Callbacks Required"
+  value={callbacksRequired}
+/>
                     <SnapshotRow
                       label="Reserved Vehicles"
                       value={reservedVehicles}
@@ -1122,6 +1343,7 @@ function exportSalespersonCsv() {
                       value={financeSubmitted}
                     />
                     <SnapshotRow label="Lost Deals" value={lostDeals} />
+                    
                   </div>
                 </ReportCard>
 
