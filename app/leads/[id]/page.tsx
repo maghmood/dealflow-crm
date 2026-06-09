@@ -1,6 +1,6 @@
 "use client";
 import PageAccessGuard from "@/components/PageAccessGuard";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -111,6 +111,13 @@ type InventoryVehicle = {
   created_at: string | null;
 };
 
+type VehicleMatch = {
+  vehicle: InventoryVehicle;
+  category: "Best Match" | "Value Option" | "Slightly Above Budget";
+  estimatedInstallment: number;
+  priceDifference: number;
+};
+
 function formatRand(value: number | null | undefined) {
   if (!value && value !== 0) return "Not captured";
 
@@ -142,6 +149,74 @@ function vehicleStatusBadge(status: string | null) {
   };
 
   return styles[value] || "bg-slate-100 text-slate-700";
+}
+
+function calculateMonthlyInstallment(
+  vehiclePrice: number,
+  depositAmount: number,
+  annualInterestRate: number,
+  termMonths: number,
+  balloonPercentage: number
+) {
+  const price = Math.max(vehiclePrice, 0);
+  const deposit = Math.max(depositAmount, 0);
+  const months = Math.max(termMonths, 1);
+  const balloonRate = Math.max(balloonPercentage, 0) / 100;
+
+  const financedAmount = Math.max(price - deposit, 0);
+  const balloonAmount = price * balloonRate;
+  const monthlyRate = Math.max(annualInterestRate, 0) / 100 / 12;
+
+  if (monthlyRate === 0) {
+    return Math.max((financedAmount - balloonAmount) / months, 0);
+  }
+
+  const discountedBalloon =
+    balloonAmount / Math.pow(1 + monthlyRate, months);
+
+  const paymentPresentValue = financedAmount - discountedBalloon;
+
+  if (paymentPresentValue <= 0) return 0;
+
+  return (
+    (paymentPresentValue * monthlyRate) /
+    (1 - Math.pow(1 + monthlyRate, -months))
+  );
+}
+
+function calculateMaximumVehiclePrice(
+  targetMonthlyInstallment: number,
+  depositAmount: number,
+  annualInterestRate: number,
+  termMonths: number,
+  balloonPercentage: number
+) {
+  const monthlyPayment = Math.max(targetMonthlyInstallment, 0);
+  const deposit = Math.max(depositAmount, 0);
+  const months = Math.max(termMonths, 1);
+  const balloonRate = Math.max(balloonPercentage, 0) / 100;
+  const monthlyRate = Math.max(annualInterestRate, 0) / 100 / 12;
+
+  if (monthlyRate === 0) {
+    const denominator = 1 - balloonRate;
+
+    if (denominator <= 0) return 0;
+
+    return (deposit + monthlyPayment * months) / denominator;
+  }
+
+  const annuityPresentValue =
+    monthlyPayment *
+    ((1 - Math.pow(1 + monthlyRate, -months)) / monthlyRate);
+
+  const discountedBalloonRate =
+    balloonRate / Math.pow(1 + monthlyRate, months);
+
+  const denominator = 1 - discountedBalloonRate;
+
+  if (denominator <= 0) return 0;
+
+  return (deposit + annuityPresentValue) / denominator;
 }
 
 export default function LeadDetailPage() {
@@ -201,24 +276,129 @@ const [savingCall, setSavingCall] = useState(false);
   const [documentType, setDocumentType] = useState("ID Copy");
   const [uploadingDocument, setUploadingDocument] = useState(false);
 
-  const [vehiclePrice, setVehiclePrice] = useState("429900");
-  const [deposit, setDeposit] = useState("40000");
-  const [interestRate, setInterestRate] = useState("13.5");
-  const [termMonths, setTermMonths] = useState("72");
+const [vehiclePrice, setVehiclePrice] = useState("429900");
+const [targetMonthlyInstallment, setTargetMonthlyInstallment] =
+  useState("8500");
+const [deposit, setDeposit] = useState("40000");
+const [interestRate, setInterestRate] = useState("13.5");
+const [termMonths, setTermMonths] = useState("72");
+const [balloonPercentage, setBalloonPercentage] = useState("0");
 
-  const priceNumber = Number(vehiclePrice) || 0;
-  const depositNumber = Number(deposit) || 0;
-  const rateNumber = Number(interestRate) || 0;
-  const termNumber = Number(termMonths) || 1;
+const priceNumber = Number(vehiclePrice) || 0;
+const targetInstallmentNumber =
+  Number(targetMonthlyInstallment) || 0;
+const depositNumber = Number(deposit) || 0;
+const rateNumber = Number(interestRate) || 0;
+const termNumber = Number(termMonths) || 1;
+const balloonNumber = Number(balloonPercentage) || 0;
 
-  const financeAmount = Math.max(priceNumber - depositNumber, 0);
-  const monthlyRate = rateNumber / 100 / 12;
+const financeAmount = Math.max(priceNumber - depositNumber, 0);
 
-  const estimatedInstallment =
-    monthlyRate > 0
-      ? (financeAmount * monthlyRate) /
-        (1 - Math.pow(1 + monthlyRate, -termNumber))
-      : financeAmount / termNumber;
+const balloonAmount = Math.max(
+  priceNumber * (balloonNumber / 100),
+  0
+);
+
+const estimatedInstallment = calculateMonthlyInstallment(
+  priceNumber,
+  depositNumber,
+  rateNumber,
+  termNumber,
+  balloonNumber
+);
+
+const maximumAffordableVehiclePrice = calculateMaximumVehiclePrice(
+  targetInstallmentNumber,
+  depositNumber,
+  rateNumber,
+  termNumber,
+  balloonNumber
+);
+
+const affordabilityDifference =
+  maximumAffordableVehiclePrice - priceNumber;
+
+const linkedVehicleIsAffordable =
+  priceNumber > 0 &&
+  priceNumber <= maximumAffordableVehiclePrice;
+
+const vehicleMatches = useMemo<VehicleMatch[]>(() => {
+  if (maximumAffordableVehiclePrice <= 0) return [];
+
+  return inventoryVehicles
+    .filter((vehicle) => {
+      const price = Number(vehicle.price) || 0;
+
+      return (
+        price > 0 &&
+        vehicle.status === "Available" &&
+        price <= maximumAffordableVehiclePrice * 1.1
+      );
+    })
+    .map((vehicle) => {
+      const price = Number(vehicle.price) || 0;
+      const ratio = price / maximumAffordableVehiclePrice;
+
+      let category: VehicleMatch["category"];
+
+      if (price > maximumAffordableVehiclePrice) {
+        category = "Slightly Above Budget";
+      } else if (ratio >= 0.85) {
+        category = "Best Match";
+      } else {
+        category = "Value Option";
+      }
+
+      return {
+        vehicle,
+        category,
+        estimatedInstallment: calculateMonthlyInstallment(
+          price,
+          depositNumber,
+          rateNumber,
+          termNumber,
+          balloonNumber
+        ),
+        priceDifference: maximumAffordableVehiclePrice - price,
+      };
+    })
+    .sort((a, b) => {
+      const categoryOrder = {
+        "Best Match": 1,
+        "Value Option": 2,
+        "Slightly Above Budget": 3,
+      };
+
+      const categoryDifference =
+        categoryOrder[a.category] - categoryOrder[b.category];
+
+      if (categoryDifference !== 0) return categoryDifference;
+
+      return (
+        Math.abs(a.priceDifference) -
+        Math.abs(b.priceDifference)
+      );
+    });
+}, [
+  inventoryVehicles,
+  maximumAffordableVehiclePrice,
+  depositNumber,
+  rateNumber,
+  termNumber,
+  balloonNumber,
+]);
+
+const bestMatches = vehicleMatches.filter(
+  (match) => match.category === "Best Match"
+);
+
+const valueOptions = vehicleMatches.filter(
+  (match) => match.category === "Value Option"
+);
+
+const slightlyAboveBudget = vehicleMatches.filter(
+  (match) => match.category === "Slightly Above Budget"
+);
 
   function normalizePhone(phone: string | null) {
     if (!phone) return "";
@@ -330,27 +510,37 @@ function startCustomerCall() {
     setInventoryVehicles(Array.isArray(data) ? data : []);
   }
 
-  async function linkInventoryVehicleToLead() {
-    if (!profile?.company_id || !lead || selectedInventoryVehicleId === "") {
-      alert("Please select a vehicle to link.");
-      return;
-    }
+  async function linkInventoryVehicleById(vehicleId: number) {
+  if (!profile?.company_id || !lead) {
+    alert("Lead or company information is missing.");
+    return;
+  }
 
-    const selectedVehicle = inventoryVehicles.find(
-      (vehicle) => vehicle.id === Number(selectedInventoryVehicleId)
-    );
+  const selectedVehicle = inventoryVehicles.find(
+    (vehicle) => vehicle.id === vehicleId
+  );
 
-    if (!selectedVehicle) {
-      alert("Selected vehicle could not be found.");
-      return;
-    }
+  if (!selectedVehicle) {
+    alert("Selected vehicle could not be found.");
+    return;
+  }
 
-    setLinkingVehicle(true);
+  const confirmed = window.confirm(
+    `Link ${formatVehicleTitle(selectedVehicle)} to ${lead.customer}?`
+  );
 
+  if (!confirmed) return;
+
+  setLinkingVehicle(true);
+
+  try {
     const title = formatVehicleTitle(selectedVehicle);
 
-    if (linkedVehicle?.id && linkedVehicle.id !== selectedVehicle.id) {
-      await supabase
+    if (
+      linkedVehicle?.id &&
+      linkedVehicle.id !== selectedVehicle.id
+    ) {
+      const { error: releaseError } = await supabase
         .from("inventory_vehicles")
         .update({
           linked_lead_id: null,
@@ -362,6 +552,14 @@ function startCustomerCall() {
         })
         .eq("id", linkedVehicle.id)
         .eq("company_id", profile.company_id);
+
+      if (releaseError) {
+        alert(
+          "Could not release the previously linked vehicle: " +
+            releaseError.message
+        );
+        return;
+      }
     }
 
     const { error: vehicleError } = await supabase
@@ -379,40 +577,84 @@ function startCustomerCall() {
 
     if (vehicleError) {
       alert("Error linking vehicle: " + vehicleError.message);
-      setLinkingVehicle(false);
       return;
     }
 
     const { error: leadError } = await supabase
       .from("leads")
-      .update({ vehicle: title })
+      .update({
+        vehicle: title,
+      })
       .eq("id", lead.id)
       .eq("company_id", profile.company_id);
 
     if (leadError) {
-      alert("Vehicle linked, but lead update failed: " + leadError.message);
-      setLinkingVehicle(false);
+      alert(
+        "Vehicle linked, but lead update failed: " +
+          leadError.message
+      );
       return;
     }
 
     await addActivity(
-      "Vehicle Linked",
-      `${title}${
-        selectedVehicle.stock_code ? ` • Stock ${selectedVehicle.stock_code}` : ""
-      } linked from inventory.`,
+      "Vehicle Linked from Affordability Match",
+      [
+        title,
+        selectedVehicle.stock_code
+          ? `Stock ${selectedVehicle.stock_code}`
+          : null,
+        `Price ${formatRand(selectedVehicle.price)}`,
+        `Estimated instalment ${formatRand(
+          calculateMonthlyInstallment(
+            Number(selectedVehicle.price) || 0,
+            depositNumber,
+            rateNumber,
+            termNumber,
+            balloonNumber
+          )
+        )}/month`,
+      ]
+        .filter(Boolean)
+        .join(" • "),
       "inventory",
       "green"
     );
 
-    setLead({ ...lead, vehicle: title });
-    setVehiclePrice(selectedVehicle.price ? String(selectedVehicle.price) : vehiclePrice);
+    setLead({
+      ...lead,
+      vehicle: title,
+    });
+
+    setVehiclePrice(
+      selectedVehicle.price
+        ? String(selectedVehicle.price)
+        : vehiclePrice
+    );
+
     setShowVehicleLinkModal(false);
     setSelectedInventoryVehicleId("");
-    setLinkingVehicle(false);
 
-    await fetchLinkedInventoryVehicle();
-    await fetchInventoryVehicles();
+    await Promise.all([
+      fetchLinkedInventoryVehicle(),
+      fetchInventoryVehicles(),
+    ]);
+
+    alert("Vehicle linked successfully.");
+  } finally {
+    setLinkingVehicle(false);
   }
+}
+
+async function linkInventoryVehicleToLead() {
+  if (selectedInventoryVehicleId === "") {
+    alert("Please select a vehicle to link.");
+    return;
+  }
+
+  await linkInventoryVehicleById(
+    Number(selectedInventoryVehicleId)
+  );
+}
 
   async function fetchWhatsappMessages() {
     if (!profile?.company_id) return;
@@ -1456,100 +1698,457 @@ async function fetchCallLogs() {
           </div>
 
           <div className="rounded-xl bg-white p-6 shadow">
+  
+  <div className="rounded-xl bg-white p-6 shadow">
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <h2 className="text-xl font-bold text-slate-800">
+        Matching Inventory
+      </h2>
+
+      <p className="mt-1 text-sm text-slate-500">
+        Available vehicles matched to the calculated affordability
+      </p>
+    </div>
+
+    <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+      {vehicleMatches.length} match
+      {vehicleMatches.length === 1 ? "" : "es"}
+    </span>
+  </div>
+
+  <div className="mt-4 rounded-xl bg-slate-50 p-4">
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      Calculated Maximum Price
+    </p>
+
+    <p className="mt-1 text-2xl font-bold text-slate-900">
+      {formatRand(maximumAffordableVehiclePrice)}
+    </p>
+
+    <p className="mt-1 text-sm text-slate-500">
+      Based on a target instalment of{" "}
+      {formatRand(targetInstallmentNumber)}/month
+    </p>
+  </div>
+
+  {vehicleMatches.length === 0 ? (
+    <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+      <p className="font-semibold text-slate-700">
+        No available vehicles found within the matching range.
+      </p>
+
+      <p className="mt-2 text-sm text-slate-500">
+        Try increasing the target instalment, deposit, term or balloon
+        percentage.
+      </p>
+
+      <Link
+        href="/inventory"
+        className="mt-4 inline-flex rounded-lg brand-primary-bg px-4 py-2 text-sm font-semibold text-white"
+      >
+        Open Inventory
+      </Link>
+    </div>
+  ) : (
+    <div className="mt-6 space-y-6">
+      {[
+        {
+          title: "Best Matches",
+          description:
+            "Vehicles closest to the customer’s maximum affordable price.",
+          matches: bestMatches,
+        },
+        {
+          title: "Value Options",
+          description:
+            "Lower-priced vehicles that leave additional room in the budget.",
+          matches: valueOptions,
+        },
+        {
+          title: "Slightly Above Budget",
+          description:
+            "Vehicles up to 10% above the calculated maximum price.",
+          matches: slightlyAboveBudget,
+        },
+      ].map((section) => {
+        if (section.matches.length === 0) return null;
+
+        return (
+          <div key={section.title}>
             <div>
-              <h2 className="text-xl font-bold text-slate-800">
-                Affordability Calculator
-              </h2>
-              
+              <h3 className="font-bold text-slate-800">
+                {section.title}
+              </h3>
+
               <p className="text-sm text-slate-500">
-                Estimate monthly vehicle repayments
+                {section.description}
               </p>
             </div>
 
-            <div className="mt-5 space-y-4">
-              <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Vehicle Price
-                </label>
-                <input
-                  type="number"
-                  value={vehiclePrice}
-                  onChange={(e) => setVehiclePrice(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
-                />
-              </div>
+            <div className="mt-3 space-y-3">
+              {section.matches.slice(0, 5).map((match) => {
+                const vehicle = match.vehicle;
 
-              <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Deposit
-                </label>
-                <input
-                  type="number"
-                  value={deposit}
-                  onChange={(e) => setDeposit(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
-                />
-              </div>
+                return (
+                  <div
+                    key={vehicle.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-20 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-200">
+                        {vehicle.image_url ? (
+                          <img
+                            src={vehicle.image_url}
+                            alt={formatVehicleTitle(vehicle)}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-2xl">🚗</span>
+                        )}
+                      </div>
 
-              <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Interest Rate %
-                </label>
-                <input
-                  type="number"
-                  value={interestRate}
-                  onChange={(e) => setInterestRate(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
-                />
-              </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="font-bold text-slate-900">
+                              {formatVehicleTitle(vehicle)}
+                            </p>
 
-              <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Term Months
-                </label>
-                <input
-                  type="number"
-                  value={termMonths}
-                  onChange={(e) => setTermMonths(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
-                />
-              </div>
-            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Stock: {vehicle.stock_code || "-"} •{" "}
+                              {vehicle.mileage
+                                ? `${vehicle.mileage.toLocaleString(
+                                    "en-ZA"
+                                  )} km`
+                                : "Mileage unavailable"}
+                            </p>
+                          </div>
 
-            <div className="mt-6 rounded-xl brand-primary-bg p-5 text-white">
-              <p className="text-sm text-slate-300">
-                Estimated Monthly Installment
-              </p>
+                          <span
+                            className={`self-start rounded-full px-3 py-1 text-xs font-semibold ${
+                              match.category === "Best Match"
+                                ? "bg-green-100 text-green-700"
+                                : match.category === "Value Option"
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-orange-100 text-orange-700"
+                            }`}
+                          >
+                            {match.category}
+                          </span>
+                        </div>
 
-              <p className="mt-2 text-3xl font-bold">
-                R
-                {estimatedInstallment.toLocaleString("en-ZA", {
-                  maximumFractionDigits: 0,
-                })}
-              </p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <p className="text-xs text-slate-400">
+                              Vehicle Price
+                            </p>
 
-              <p className="mt-2 text-sm text-slate-300">
-                Finance amount: R{financeAmount.toLocaleString("en-ZA")}
-              </p>
-            </div>
+                            <p className="font-semibold text-slate-800">
+                              {formatRand(vehicle.price)}
+                            </p>
+                          </div>
 
-            <button
-              onClick={() => {
-                addActivity(
-                  "Affordability Calculated",
-                  `Estimated installment: R${estimatedInstallment.toLocaleString(
-                    "en-ZA",
-                    { maximumFractionDigits: 0 }
-                  )}/month`,
-                  "calculator",
-                  "orange"
+                          <div>
+                            <p className="text-xs text-slate-400">
+                              Estimated Instalment
+                            </p>
+
+                            <p className="font-semibold text-slate-800">
+                              {formatRand(
+                                match.estimatedInstallment
+                              )}
+                              /month
+                            </p>
+                          </div>
+                        </div>
+
+                        <p className="mt-3 text-xs text-slate-500">
+                          {match.priceDifference >= 0
+                            ? `${formatRand(
+                                match.priceDifference
+                              )} below maximum budget`
+                            : `${formatRand(
+                                Math.abs(match.priceDifference)
+                              )} above maximum budget`}
+                        </p>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Link
+                            href={`/inventory/${vehicle.id}`}
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                          >
+                            View Vehicle
+                          </Link>
+
+                          <WriteAccessGuard>
+                            <button
+                              type="button"
+                              disabled={linkingVehicle}
+                              onClick={() =>
+                                linkInventoryVehicleById(vehicle.id)
+                              }
+                              className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+                            >
+                              {linkingVehicle
+                                ? "Linking..."
+                                : "Link to Lead"}
+                            </button>
+                          </WriteAccessGuard>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 );
-              }}
-              className="mt-4 w-full rounded-lg bg-orange-500 px-4 py-3 text-white hover:bg-orange-400"
-            >
-              Save Calculation to Timeline
-            </button>
+              })}
+            </div>
           </div>
+        );
+      })}
+    </div>
+  )}
+</div>
+  
+  <div>
+    <h2 className="text-xl font-bold text-slate-800">
+      Affordability Calculator
+    </h2>
+
+    <p className="text-sm text-slate-500">
+      Calculate the customer&apos;s maximum affordable vehicle price
+    </p>
+  </div>
+
+  <div className="mt-5 space-y-4">
+    <div>
+      <label className="text-sm font-medium text-slate-600">
+        Target Monthly Instalment
+      </label>
+
+      <input
+        type="number"
+        min="0"
+        step="100"
+        value={targetMonthlyInstallment}
+        onChange={(e) =>
+          setTargetMonthlyInstallment(e.target.value)
+        }
+        className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+      />
+    </div>
+
+    <div>
+      <label className="text-sm font-medium text-slate-600">
+        Deposit
+      </label>
+
+      <input
+        type="number"
+        min="0"
+        step="1000"
+        value={deposit}
+        onChange={(e) => setDeposit(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+      />
+    </div>
+
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label className="text-sm font-medium text-slate-600">
+          Interest Rate %
+        </label>
+
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          value={interestRate}
+          onChange={(e) => setInterestRate(e.target.value)}
+          className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+        />
+      </div>
+
+      <div>
+        <label className="text-sm font-medium text-slate-600">
+          Term Months
+        </label>
+
+        <select
+          value={termMonths}
+          onChange={(e) => setTermMonths(e.target.value)}
+          className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+        >
+          <option value="12">12 months</option>
+          <option value="24">24 months</option>
+          <option value="36">36 months</option>
+          <option value="48">48 months</option>
+          <option value="60">60 months</option>
+          <option value="72">72 months</option>
+          <option value="84">84 months</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label className="text-sm font-medium text-slate-600">
+        Balloon / Residual %
+      </label>
+
+      <select
+        value={balloonPercentage}
+        onChange={(e) => setBalloonPercentage(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+      >
+        <option value="0">No balloon</option>
+        <option value="10">10%</option>
+        <option value="20">20%</option>
+        <option value="30">30%</option>
+        <option value="35">35%</option>
+        <option value="40">40%</option>
+      </select>
+
+      <p className="mt-1 text-xs text-slate-400">
+        A balloon lowers the monthly instalment but leaves a final amount
+        payable at the end of the agreement.
+      </p>
+    </div>
+  </div>
+
+  <div className="mt-6 rounded-xl brand-primary-bg p-5 text-white">
+    <p className="text-sm text-slate-300">
+      Maximum Affordable Vehicle Price
+    </p>
+
+    <p className="mt-2 text-3xl font-bold">
+      R
+      {maximumAffordableVehiclePrice.toLocaleString("en-ZA", {
+        maximumFractionDigits: 0,
+      })}
+    </p>
+
+    <div className="mt-4 grid gap-2 text-sm text-slate-200">
+      <p>
+        Target instalment: R
+        {targetInstallmentNumber.toLocaleString("en-ZA", {
+          maximumFractionDigits: 0,
+        })}
+        /month
+      </p>
+
+      <p>
+        Deposit: R
+        {depositNumber.toLocaleString("en-ZA", {
+          maximumFractionDigits: 0,
+        })}
+      </p>
+
+      <p>
+        Term: {termNumber} months • Balloon: {balloonNumber}%
+      </p>
+    </div>
+  </div>
+
+  {priceNumber > 0 && (
+    <div
+      className={`mt-4 rounded-xl border p-4 ${
+        linkedVehicleIsAffordable
+          ? "border-green-200 bg-green-50"
+          : "border-orange-200 bg-orange-50"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p
+            className={`text-sm font-semibold ${
+              linkedVehicleIsAffordable
+                ? "text-green-700"
+                : "text-orange-700"
+            }`}
+          >
+            {linkedVehicle
+              ? formatVehicleTitle(linkedVehicle)
+              : "Current vehicle price"}
+          </p>
+
+          <p className="mt-1 text-sm text-slate-600">
+            Vehicle price: {formatRand(priceNumber)}
+          </p>
+        </div>
+
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+            linkedVehicleIsAffordable
+              ? "bg-green-100 text-green-700"
+              : "bg-orange-100 text-orange-700"
+          }`}
+        >
+          {linkedVehicleIsAffordable
+            ? "Within Budget"
+            : "Above Budget"}
+        </span>
+      </div>
+
+      <div className="mt-4 space-y-1 text-sm text-slate-600">
+        <p>
+          Estimated instalment: R
+          {estimatedInstallment.toLocaleString("en-ZA", {
+            maximumFractionDigits: 0,
+          })}
+          /month
+        </p>
+
+        <p>
+          Balloon amount: R
+          {balloonAmount.toLocaleString("en-ZA", {
+            maximumFractionDigits: 0,
+          })}
+        </p>
+
+        <p>
+          {linkedVehicleIsAffordable
+            ? `Budget remaining: ${formatRand(
+                Math.max(affordabilityDifference, 0)
+              )}`
+            : `Above calculated budget by: ${formatRand(
+                Math.abs(affordabilityDifference)
+              )}`}
+        </p>
+      </div>
+    </div>
+  )}
+
+  <WriteAccessGuard>
+    <button
+      type="button"
+      onClick={() => {
+        addActivity(
+          "Affordability Calculated",
+          [
+            `Target instalment: R${targetInstallmentNumber.toLocaleString(
+              "en-ZA",
+              { maximumFractionDigits: 0 }
+            )}/month`,
+            `Maximum vehicle price: R${maximumAffordableVehiclePrice.toLocaleString(
+              "en-ZA",
+              { maximumFractionDigits: 0 }
+            )}`,
+            `Deposit: R${depositNumber.toLocaleString("en-ZA", {
+              maximumFractionDigits: 0,
+            })}`,
+            `Interest: ${rateNumber}%`,
+            `Term: ${termNumber} months`,
+            `Balloon: ${balloonNumber}%`,
+          ].join(" • "),
+          "calculator",
+          "orange"
+        );
+      }}
+      className="mt-4 w-full rounded-lg bg-orange-500 px-4 py-3 text-white hover:bg-orange-400"
+    >
+      Save Calculation to Timeline
+    </button>
+  </WriteAccessGuard>
+</div>
 
 <div className="rounded-xl bg-white p-6 shadow">
   <div className="flex items-start justify-between gap-4">
