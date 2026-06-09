@@ -118,6 +118,25 @@ type VehicleMatch = {
   priceDifference: number;
 };
 
+type AffordabilityAssessment = {
+  id: number;
+  company_id: number;
+  lead_id: number;
+  created_by_id: number | null;
+  created_by_name: string | null;
+  target_monthly_installment: number;
+  deposit_amount: number;
+  interest_rate: number;
+  term_months: number;
+  balloon_percentage: number;
+  maximum_vehicle_price: number;
+  selected_vehicle_id: number | null;
+  selected_vehicle_price: number | null;
+  estimated_installment: number | null;
+  notes: string | null;
+  created_at: string;
+};
+
 function formatRand(value: number | null | undefined) {
   if (!value && value !== 0) return "Not captured";
 
@@ -283,7 +302,13 @@ const [deposit, setDeposit] = useState("40000");
 const [interestRate, setInterestRate] = useState("13.5");
 const [termMonths, setTermMonths] = useState("72");
 const [balloonPercentage, setBalloonPercentage] = useState("0");
+const [affordabilityAssessments, setAffordabilityAssessments] = useState<
+  AffordabilityAssessment[]
+>([]);
 
+const [assessmentNotes, setAssessmentNotes] = useState("");
+const [savingAssessment, setSavingAssessment] = useState(false);
+const [loadingAssessments, setLoadingAssessments] = useState(false);
 const priceNumber = Number(vehiclePrice) || 0;
 const targetInstallmentNumber =
   Number(targetMonthlyInstallment) || 0;
@@ -1012,6 +1037,114 @@ await Promise.all([
   }
 }
 
+
+async function saveAffordabilityAssessment() {
+  if (!lead || !profile?.company_id) return;
+
+  if (targetInstallmentNumber <= 0) {
+    alert("Please enter a valid target monthly instalment.");
+    return;
+  }
+
+  if (termNumber <= 0) {
+    alert("Please select a valid finance term.");
+    return;
+  }
+
+  if (maximumAffordableVehiclePrice <= 0) {
+    alert("The affordability calculation is not valid.");
+    return;
+  }
+
+  setSavingAssessment(true);
+
+  try {
+    const selectedVehicleId = linkedVehicle?.id || null;
+    const selectedVehiclePrice = linkedVehicle?.price || null;
+
+    const selectedVehicleInstallment =
+      selectedVehiclePrice !== null
+        ? calculateMonthlyInstallment(
+            Number(selectedVehiclePrice),
+            depositNumber,
+            rateNumber,
+            termNumber,
+            balloonNumber
+          )
+        : null;
+
+    const { data: savedAssessment, error } = await supabase
+      .from("lead_affordability_assessments")
+      .insert({
+        company_id: profile.company_id,
+        lead_id: lead.id,
+        created_by_id: profile.id,
+        created_by_name:
+          profile.full_name || profile.email || "Unknown User",
+        target_monthly_installment: targetInstallmentNumber,
+        deposit_amount: depositNumber,
+        interest_rate: rateNumber,
+        term_months: termNumber,
+        balloon_percentage: balloonNumber,
+        maximum_vehicle_price: maximumAffordableVehiclePrice,
+        selected_vehicle_id: selectedVehicleId,
+        selected_vehicle_price: selectedVehiclePrice,
+        estimated_installment: selectedVehicleInstallment,
+        notes: assessmentNotes.trim() || null,
+      })
+      .select("*")
+      .single();
+
+    if (error || !savedAssessment) {
+      alert(
+        "Error saving affordability assessment: " +
+          (error?.message || "Unknown error")
+      );
+      return;
+    }
+
+    await addActivity(
+      "Affordability Assessment Saved",
+      [
+        `Target instalment: ${formatRand(
+          targetInstallmentNumber
+        )}/month`,
+        `Maximum vehicle price: ${formatRand(
+          maximumAffordableVehiclePrice
+        )}`,
+        `Deposit: ${formatRand(depositNumber)}`,
+        `Interest: ${rateNumber}%`,
+        `Term: ${termNumber} months`,
+        `Balloon: ${balloonNumber}%`,
+        linkedVehicle
+          ? `Selected vehicle: ${formatVehicleTitle(linkedVehicle)}`
+          : null,
+        assessmentNotes.trim()
+          ? `Notes: ${assessmentNotes.trim()}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" • "),
+      "calculator",
+      "orange"
+    );
+
+    setAffordabilityAssessments((current) => [
+      savedAssessment,
+      ...current,
+    ]);
+
+    setAssessmentNotes("");
+
+    alert("Affordability assessment saved successfully.");
+  } catch (error) {
+    console.error("Unexpected affordability save error:", error);
+    alert("Unexpected error saving affordability assessment.");
+  } finally {
+    setSavingAssessment(false);
+  }
+}
+
   async function fetchSalesUsers() {
     if (!profile?.company_id) return;
 
@@ -1133,6 +1266,33 @@ async function fetchCallLogs() {
   }
 
   setLoadingCallLogs(false);
+}
+
+async function fetchAffordabilityAssessments() {
+  if (!profile?.company_id) return;
+
+  setLoadingAssessments(true);
+
+  const { data, error } = await supabase
+    .from("lead_affordability_assessments")
+    .select("*")
+    .eq("lead_id", leadId)
+    .eq("company_id", profile.company_id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error(
+      "Error loading affordability assessments:",
+      error.message
+    );
+    setAffordabilityAssessments([]);
+  } else {
+    setAffordabilityAssessments(
+      Array.isArray(data) ? data : []
+    );
+  }
+
+  setLoadingAssessments(false);
 }
 
   async function addActivity(
@@ -1285,6 +1445,7 @@ async function fetchCallLogs() {
     fetchLeadTasks();
     fetchLinkedInventoryVehicle();
     fetchInventoryVehicles();
+    fetchAffordabilityAssessments();
   }, [leadId, profile?.company_id]);
 
   if (loading) {
@@ -1919,6 +2080,149 @@ async function fetchCallLogs() {
     </p>
   </div>
 
+<div className="rounded-xl bg-white p-6 shadow">
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <h2 className="text-xl font-bold text-slate-800">
+        Affordability History
+      </h2>
+
+      <p className="mt-1 text-sm text-slate-500">
+        Previous affordability assessments saved for this lead
+      </p>
+    </div>
+
+    <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+      {affordabilityAssessments.length} assessment
+      {affordabilityAssessments.length === 1 ? "" : "s"}
+    </span>
+  </div>
+
+  <div className="mt-5 space-y-3">
+    {loadingAssessments ? (
+      <p className="text-sm text-slate-500">
+        Loading affordability history...
+      </p>
+    ) : affordabilityAssessments.length === 0 ? (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+        <p className="font-medium text-slate-700">
+          No affordability assessments saved yet.
+        </p>
+
+        <p className="mt-1 text-sm text-slate-500">
+          Complete the calculator and save the assessment.
+        </p>
+      </div>
+    ) : (
+      affordabilityAssessments.slice(0, 8).map((assessment) => (
+        <div
+          key={assessment.id}
+          className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-slate-900">
+                Maximum Price:{" "}
+                {formatRand(assessment.maximum_vehicle_price)}
+              </p>
+
+              <p className="mt-1 text-sm text-slate-600">
+                Target:{" "}
+                {formatRand(
+                  assessment.target_monthly_installment
+                )}
+                /month
+              </p>
+            </div>
+
+            <p className="text-right text-xs text-slate-400">
+              {new Date(assessment.created_at).toLocaleString(
+                "en-ZA"
+              )}
+            </p>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-xs text-slate-400">
+                Deposit
+              </p>
+
+              <p className="text-sm font-semibold text-slate-700">
+                {formatRand(assessment.deposit_amount)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-xs text-slate-400">
+                Interest Rate
+              </p>
+
+              <p className="text-sm font-semibold text-slate-700">
+                {assessment.interest_rate}%
+              </p>
+            </div>
+
+            <div>
+              <p className="text-xs text-slate-400">
+                Term
+              </p>
+
+              <p className="text-sm font-semibold text-slate-700">
+                {assessment.term_months} months
+              </p>
+            </div>
+
+            <div>
+              <p className="text-xs text-slate-400">
+                Balloon
+              </p>
+
+              <p className="text-sm font-semibold text-slate-700">
+                {assessment.balloon_percentage}%
+              </p>
+            </div>
+          </div>
+
+          {assessment.selected_vehicle_price !== null && (
+            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-500">
+                Selected Vehicle
+              </p>
+
+              <p className="mt-1 text-sm font-semibold text-blue-800">
+                Price:{" "}
+                {formatRand(assessment.selected_vehicle_price)}
+              </p>
+
+              {assessment.estimated_installment !== null && (
+                <p className="mt-1 text-sm text-blue-700">
+                  Estimated instalment:{" "}
+                  {formatRand(
+                    assessment.estimated_installment
+                  )}
+                  /month
+                </p>
+              )}
+            </div>
+          )}
+
+          {assessment.notes && (
+            <p className="mt-4 text-sm text-slate-600">
+              {assessment.notes}
+            </p>
+          )}
+
+          <p className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-400">
+            Saved by{" "}
+            {assessment.created_by_name || "Unknown User"}
+          </p>
+        </div>
+      ))
+    )}
+  </div>
+</div>
+
   <div className="mt-5 space-y-4">
     <div>
       <label className="text-sm font-medium text-slate-600">
@@ -2117,37 +2421,31 @@ async function fetchCallLogs() {
     </div>
   )}
 
-  <WriteAccessGuard>
-    <button
-      type="button"
-      onClick={() => {
-        addActivity(
-          "Affordability Calculated",
-          [
-            `Target instalment: R${targetInstallmentNumber.toLocaleString(
-              "en-ZA",
-              { maximumFractionDigits: 0 }
-            )}/month`,
-            `Maximum vehicle price: R${maximumAffordableVehiclePrice.toLocaleString(
-              "en-ZA",
-              { maximumFractionDigits: 0 }
-            )}`,
-            `Deposit: R${depositNumber.toLocaleString("en-ZA", {
-              maximumFractionDigits: 0,
-            })}`,
-            `Interest: ${rateNumber}%`,
-            `Term: ${termNumber} months`,
-            `Balloon: ${balloonNumber}%`,
-          ].join(" • "),
-          "calculator",
-          "orange"
-        );
-      }}
-      className="mt-4 w-full rounded-lg bg-orange-500 px-4 py-3 text-white hover:bg-orange-400"
-    >
-      Save Calculation to Timeline
-    </button>
-  </WriteAccessGuard>
+  <div className="mt-4">
+  <label className="text-sm font-medium text-slate-600">
+    Assessment Notes
+  </label>
+
+  <textarea
+    value={assessmentNotes}
+    onChange={(e) => setAssessmentNotes(e.target.value)}
+    placeholder="Add affordability notes, customer preferences or conditions..."
+    className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 p-3"
+  />
+</div>
+
+<WriteAccessGuard>
+  <button
+    type="button"
+    onClick={saveAffordabilityAssessment}
+    disabled={savingAssessment}
+    className="mt-4 w-full rounded-lg bg-orange-500 px-4 py-3 text-white hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-60"
+  >
+    {savingAssessment
+      ? "Saving Assessment..."
+      : "Save Affordability Assessment"}
+  </button>
+</WriteAccessGuard>
 </div>
 
 <div className="rounded-xl bg-white p-6 shadow">
