@@ -162,9 +162,11 @@ export default function LeadDetailPage() {
   const [whatsappInput, setWhatsappInput] = useState("");
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
 
-  const [showCallModal, setShowCallModal] = useState(false);
-  const [callOutcome, setCallOutcome] = useState("");
-  const [callNotes, setCallNotes] = useState("");
+const [showCallModal, setShowCallModal] = useState(false);
+const [callOutcome, setCallOutcome] = useState("");
+const [callNotes, setCallNotes] = useState("");
+const [callFollowUpDate, setCallFollowUpDate] = useState("");
+const [savingCall, setSavingCall] = useState(false);
 
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
@@ -210,6 +212,30 @@ export default function LeadDetailPage() {
 
     return cleaned;
   }
+
+function startCustomerCall() {
+  if (!lead?.phone) {
+    alert("Customer phone number is missing.");
+    return;
+  }
+
+  const normalizedPhone = normalizePhone(lead.phone);
+
+  if (!normalizedPhone) {
+    alert("Customer phone number is invalid.");
+    return;
+  }
+
+  setCallOutcome("");
+  setCallNotes("");
+  setCallFollowUpDate("");
+  setShowCallModal(true);
+
+  // Give React a moment to display the modal before opening the dialler.
+  setTimeout(() => {
+    window.location.href = `tel:+${normalizedPhone}`;
+  }, 100);
+}
 
   function getFileNameFromUrl(fileUrl: string | null) {
     if (!fileUrl) return "Document file";
@@ -583,6 +609,145 @@ export default function LeadDetailPage() {
     alert("Task created successfully.");
   }
 
+async function saveCallLog() {
+  if (!lead || !profile?.company_id) return;
+
+  if (!callOutcome) {
+    alert("Please select a call outcome.");
+    return;
+  }
+
+  const followUpRequired = callOutcome === "Call Back Later";
+
+  if (followUpRequired && !callFollowUpDate) {
+    alert("Please select a callback date and time.");
+    return;
+  }
+
+  setSavingCall(true);
+
+  try {
+    const normalizedPhone = normalizePhone(lead.phone);
+
+    const { data: savedCall, error: callError } = await supabase
+      .from("call_logs")
+      .insert({
+        company_id: profile.company_id,
+        lead_id: lead.id,
+        user_profile_id: profile.id,
+        user_name: profile.full_name || profile.email || "Unknown User",
+        phone_number: normalizedPhone ? `+${normalizedPhone}` : lead.phone,
+        direction: "Outbound",
+        outcome: callOutcome,
+        notes: callNotes.trim() || null,
+        follow_up_required: followUpRequired,
+        follow_up_date:
+          followUpRequired && callFollowUpDate
+            ? new Date(callFollowUpDate).toISOString()
+            : null,
+      })
+      .select("id")
+      .single();
+
+    if (callError || !savedCall) {
+      alert("Error saving call log: " + (callError?.message || "Unknown error"));
+      return;
+    }
+
+    let followUpTaskId: number | null = null;
+
+    if (followUpRequired && callFollowUpDate) {
+      const assignedUserId = lead.assigned_user_id || profile.id;
+      const assignedUserName =
+        lead.assigned_user_name ||
+        profile.full_name ||
+        profile.email ||
+        "Unknown User";
+
+      const { data: savedTask, error: taskError } = await supabase
+        .from("tasks")
+        .insert({
+          company_id: profile.company_id,
+          lead_id: lead.id,
+          assigned_user_id: assignedUserId,
+          assigned_user_name: assignedUserName,
+          title: `Call back ${lead.customer}`,
+          description:
+            callNotes.trim() ||
+            `Callback requested after outbound call to ${lead.customer}.`,
+          task_type: "Follow-up",
+          status: "Open",
+          priority: "High",
+          due_date: new Date(callFollowUpDate).toISOString(),
+          created_by_id: profile.id,
+          created_by_name:
+            profile.full_name || profile.email || "Unknown User",
+        })
+        .select("id")
+        .single();
+
+      if (taskError) {
+        alert(
+          "Call log saved, but callback task could not be created: " +
+            taskError.message
+        );
+      } else if (savedTask) {
+        followUpTaskId = savedTask.id;
+
+        const { error: linkError } = await supabase
+          .from("call_logs")
+          .update({
+            follow_up_task_id: followUpTaskId,
+          })
+          .eq("id", savedCall.id)
+          .eq("company_id", profile.company_id);
+
+        if (linkError) {
+          console.error(
+            "Call saved, but task link could not be updated:",
+            linkError.message
+          );
+        }
+      }
+    }
+
+    const activityDescription = [
+      `Outcome: ${callOutcome}`,
+      callNotes.trim() ? `Notes: ${callNotes.trim()}` : null,
+      followUpRequired && callFollowUpDate
+        ? `Callback: ${new Date(callFollowUpDate).toLocaleString("en-ZA")}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" • ");
+
+    await addActivity(
+      "Call Logged",
+      activityDescription,
+      "call",
+      callOutcome === "Answered" ? "green" : "orange"
+    );
+
+    await fetchLeadTasks();
+
+    setShowCallModal(false);
+    setCallOutcome("");
+    setCallNotes("");
+    setCallFollowUpDate("");
+
+    alert(
+      followUpTaskId
+        ? "Call logged and callback task created successfully."
+        : "Call logged successfully."
+    );
+  } catch (error) {
+    console.error("Unexpected call log error:", error);
+    alert("Unexpected error saving the call log.");
+  } finally {
+    setSavingCall(false);
+  }
+}
+
   async function fetchSalesUsers() {
     if (!profile?.company_id) return;
 
@@ -916,11 +1081,31 @@ export default function LeadDetailPage() {
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <div>
-                <p className="text-sm text-slate-500">Phone Number</p>
-                <button className="mt-1 text-lg font-medium text-slate-800 hover:text-blue-600">
-                  {lead.phone || "No phone captured"}
-                </button>
-              </div>
+  <p className="text-sm text-slate-500">Phone Number</p>
+
+  {lead.phone ? (
+    <WriteAccessGuard
+      fallback={
+        <p className="mt-1 text-lg font-medium text-slate-800">
+          {lead.phone}
+        </p>
+      }
+    >
+      <button
+        type="button"
+        onClick={startCustomerCall}
+        className="mt-1 text-left text-lg font-medium text-blue-700 hover:text-blue-500 hover:underline"
+        title="Call customer and log the outcome"
+      >
+        {lead.phone}
+      </button>
+    </WriteAccessGuard>
+  ) : (
+    <p className="mt-1 text-lg font-medium text-slate-500">
+      No phone captured
+    </p>
+  )}
+</div>
 
               <div>
                 <p className="text-sm text-slate-500">Assigned To</p>
@@ -1185,12 +1370,20 @@ export default function LeadDetailPage() {
                 Send WhatsApp
               </button>
 
-              <button
-                onClick={() => setShowCallModal(true)}
-                className="w-full rounded-lg brand-accent-bg px-4 py-3 text-white"
-              >
-                Log Call Attempt
-              </button>
+              <WriteAccessGuard>
+  <button
+    type="button"
+    onClick={() => {
+      setCallOutcome("");
+      setCallNotes("");
+      setCallFollowUpDate("");
+      setShowCallModal(true);
+    }}
+    className="w-full rounded-lg brand-accent-bg px-4 py-3 text-white"
+  >
+    Log Call Attempt
+  </button>
+</WriteAccessGuard>
 
               <button
                 onClick={() => setShowVehicleLinkModal(true)}
@@ -1738,77 +1931,119 @@ export default function LeadDetailPage() {
       )}
 
       {showCallModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-            <h2 className="text-2xl font-bold text-slate-800">Call Outcome</h2>
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">
+            Call Outcome
+          </h2>
 
-            <div className="mt-5 space-y-3">
-              {[
-                "Answered",
-                "No Answer",
-                "Busy",
-                "Voicemail",
-                "Wrong Number",
-                "Call Back Later",
-              ].map((option) => (
-                <button
-                  key={option}
-                  onClick={() => setCallOutcome(option)}
-                  className={`w-full rounded-lg border px-4 py-3 text-left ${
-                    callOutcome === option
-                      ? "border-blue-500 bg-blue-100"
-                      : "border-slate-300"
-                  }`}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
+          <p className="mt-1 text-sm text-slate-500">
+            {lead.customer} • {lead.phone || "No phone number"}
+          </p>
+        </div>
 
-            <textarea
-              value={callNotes}
-              onChange={(e) => setCallNotes(e.target.value)}
-              placeholder="Add notes..."
-              className="mt-5 w-full rounded-lg border border-slate-300 p-3"
-              rows={4}
-            />
+        <button
+          type="button"
+          onClick={() => {
+            if (savingCall) return;
 
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                onClick={() => setShowCallModal(false)}
-                className="rounded-lg border border-slate-300 px-4 py-2"
-              >
-                Cancel
-              </button>
+            setShowCallModal(false);
+            setCallOutcome("");
+            setCallNotes("");
+            setCallFollowUpDate("");
+          }}
+          className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600 hover:bg-slate-200"
+        >
+          ✕
+        </button>
+      </div>
 
-              <button
-                onClick={async () => {
-                  if (!callOutcome) {
-                    alert("Please select a call outcome.");
-                    return;
-                  }
+      <div className="mt-5 space-y-3">
+        {[
+          "Answered",
+          "No Answer",
+          "Busy",
+          "Voicemail",
+          "Wrong Number",
+          "Call Back Later",
+        ].map((option) => (
+          <button
+            type="button"
+            key={option}
+            onClick={() => {
+              setCallOutcome(option);
 
-                  await addActivity(
-                    "Call Attempt Logged",
-                    `Outcome: ${callOutcome}${
-                      callNotes ? ` • ${callNotes}` : ""
-                    }`,
-                    "call",
-                    "green"
-                  );
+              if (option !== "Call Back Later") {
+                setCallFollowUpDate("");
+              }
+            }}
+            className={`w-full rounded-lg border px-4 py-3 text-left ${
+              callOutcome === option
+                ? "border-blue-500 bg-blue-100 text-blue-800"
+                : "border-slate-300 text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
 
-                  setShowCallModal(false);
-                  setCallOutcome("");
-                  setCallNotes("");
-                }}
-                className="rounded-lg brand-accent-bg px-4 py-2 text-white"
-              >
-                Save Call Log
-              </button>
-            </div>
-          </div>
+      {callOutcome === "Call Back Later" && (
+        <div className="mt-5">
+          <label className="text-sm font-medium text-slate-600">
+            Callback date and time
+          </label>
+
+          <input
+            type="datetime-local"
+            value={callFollowUpDate}
+            onChange={(e) => setCallFollowUpDate(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+          />
+
+          <p className="mt-2 text-xs text-slate-500">
+            A linked follow-up task will be created automatically.
+          </p>
         </div>
       )}
+
+      <textarea
+        value={callNotes}
+        onChange={(e) => setCallNotes(e.target.value)}
+        placeholder="Add call notes..."
+        className="mt-5 w-full rounded-lg border border-slate-300 p-3"
+        rows={4}
+      />
+
+      <div className="mt-5 flex justify-end gap-3">
+        <button
+          type="button"
+          disabled={savingCall}
+          onClick={() => {
+            setShowCallModal(false);
+            setCallOutcome("");
+            setCallNotes("");
+            setCallFollowUpDate("");
+          }}
+          className="rounded-lg border border-slate-300 px-4 py-2 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={saveCallLog}
+          disabled={savingCall}
+          className="rounded-lg brand-accent-bg px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {savingCall ? "Saving..." : "Save Call Log"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {showTaskModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
