@@ -51,6 +51,24 @@ type Activity = {
   created_at: string;
 };
 
+type CallLog = {
+  id: number;
+  company_id: number;
+  lead_id: number;
+  user_profile_id: number | null;
+  user_name: string | null;
+  phone_number: string | null;
+  direction: "Outbound" | "Inbound";
+  outcome: string;
+  notes: string | null;
+  called_at: string;
+  duration_seconds: number | null;
+  follow_up_required: boolean;
+  follow_up_date: string | null;
+  follow_up_task_id: number | null;
+  created_at: string;
+};
+
 type WhatsAppDbMessage = {
   id: number;
   sender_type: "customer" | "user";
@@ -177,7 +195,8 @@ const [savingCall, setSavingCall] = useState(false);
 
   const [leadStatus, setLeadStatus] = useState("New Lead");
   const [timeline, setTimeline] = useState<Activity[]>([]);
-
+  const [callLogs, setCallLogs] = useState<CallLog[]>([]);
+  const [loadingCallLogs, setLoadingCallLogs] = useState(false);
   const [documents, setDocuments] = useState<FinanceDocument[]>([]);
   const [documentType, setDocumentType] = useState("ID Copy");
   const [uploadingDocument, setUploadingDocument] = useState(false);
@@ -728,7 +747,10 @@ async function saveCallLog() {
       callOutcome === "Answered" ? "green" : "orange"
     );
 
-    await fetchLeadTasks();
+await Promise.all([
+  fetchLeadTasks(),
+  fetchCallLogs(),
+]);
 
     setShowCallModal(false);
     setCallOutcome("");
@@ -848,6 +870,28 @@ async function saveCallLog() {
       setTimeline(data || []);
     }
   }
+
+async function fetchCallLogs() {
+  if (!profile?.company_id) return;
+
+  setLoadingCallLogs(true);
+
+  const { data, error } = await supabase
+    .from("call_logs")
+    .select("*")
+    .eq("lead_id", leadId)
+    .eq("company_id", profile.company_id)
+    .order("called_at", { ascending: false });
+
+  if (error) {
+    console.error("Error loading call logs:", error.message);
+    setCallLogs([]);
+  } else {
+    setCallLogs(Array.isArray(data) ? data : []);
+  }
+
+  setLoadingCallLogs(false);
+}
 
   async function addActivity(
     title: string,
@@ -994,6 +1038,7 @@ async function saveCallLog() {
     checkFinanceApplication();
     fetchSalesUsers();
     fetchWhatsappMessages();
+    fetchCallLogs();
     fetchDocuments();
     fetchLeadTasks();
     fetchLinkedInventoryVehicle();
@@ -1415,6 +1460,7 @@ async function saveCallLog() {
               <h2 className="text-xl font-bold text-slate-800">
                 Affordability Calculator
               </h2>
+              
               <p className="text-sm text-slate-500">
                 Estimate monthly vehicle repayments
               </p>
@@ -1504,6 +1550,93 @@ async function saveCallLog() {
               Save Calculation to Timeline
             </button>
           </div>
+
+<div className="rounded-xl bg-white p-6 shadow">
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <h2 className="text-xl font-bold text-slate-800">
+        Call History
+      </h2>
+
+      <p className="text-sm text-slate-500">
+        Structured call outcomes recorded for this lead
+      </p>
+    </div>
+
+    <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+      {callLogs.length} call{callLogs.length === 1 ? "" : "s"}
+    </span>
+  </div>
+
+  <div className="mt-5 space-y-3">
+    {loadingCallLogs ? (
+      <p className="text-sm text-slate-500">
+        Loading call history...
+      </p>
+    ) : callLogs.length === 0 ? (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+        <p className="font-medium text-slate-700">
+          No calls logged yet.
+        </p>
+
+        <p className="mt-1 text-sm text-slate-500">
+          Click the customer phone number or use Log Call Attempt.
+        </p>
+      </div>
+    ) : (
+      callLogs.slice(0, 8).map((call) => (
+        <div
+          key={call.id}
+          className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span
+                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                  call.outcome === "Answered"
+                    ? "bg-green-100 text-green-700"
+                    : call.outcome === "Wrong Number"
+                    ? "bg-red-100 text-red-700"
+                    : call.outcome === "Call Back Later"
+                    ? "bg-orange-100 text-orange-700"
+                    : "bg-slate-200 text-slate-700"
+                }`}
+              >
+                {call.outcome}
+              </span>
+
+              <p className="mt-2 text-sm font-medium text-slate-800">
+                {call.direction} call
+                {call.phone_number ? ` • ${call.phone_number}` : ""}
+              </p>
+            </div>
+
+            <p className="text-right text-xs text-slate-400">
+              {new Date(call.called_at).toLocaleString("en-ZA")}
+            </p>
+          </div>
+
+          {call.notes && (
+            <p className="mt-3 text-sm text-slate-600">
+              {call.notes}
+            </p>
+          )}
+
+          <div className="mt-3 border-t border-slate-200 pt-3 text-xs text-slate-500">
+            Logged by {call.user_name || "Unknown User"}
+          </div>
+
+          {call.follow_up_required && call.follow_up_date && (
+            <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700">
+              Callback scheduled for{" "}
+              {new Date(call.follow_up_date).toLocaleString("en-ZA")}
+            </div>
+          )}
+        </div>
+      ))
+    )}
+  </div>
+</div>
 
           <div className="rounded-xl bg-white p-6 shadow">
             <div className="flex items-start justify-between gap-4">
