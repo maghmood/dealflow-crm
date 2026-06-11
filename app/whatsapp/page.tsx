@@ -60,7 +60,20 @@ type WhatsAppMessage = {
   created_at: string;
 };
 
-const STATUS_FILTERS = ["Open", "Closed", "All"] as const;
+type InboxUser = {
+  id: number;
+  full_name: string | null;
+  email: string | null;
+  role: string | null;
+  status: string | null;
+};
+
+const STATUS_FILTERS = [
+  "Open",
+  "Closed",
+  "Archived",
+  "All",
+] as const;
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "-";
@@ -128,7 +141,8 @@ export default function WhatsAppInboxPage() {
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
-
+const [inboxUsers, setInboxUsers] = useState<InboxUser[]>([]);
+const [updatingConversation, setUpdatingConversation] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<(typeof STATUS_FILTERS)[number]>("Open");
@@ -141,6 +155,29 @@ export default function WhatsAppInboxPage() {
     conversations.find(
       (conversation) => conversation.id === selectedConversationId
     ) || null;
+
+async function fetchInboxUsers() {
+  if (!profile?.company_id) return;
+
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("id, full_name, email, role, status")
+    .eq("company_id", profile.company_id)
+    .eq("status", "Active")
+    .in("role", ["Admin", "Manager", "Sales", "Finance"])
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    console.error(
+      "Error loading WhatsApp assignable users:",
+      error.message
+    );
+    setInboxUsers([]);
+    return;
+  }
+
+  setInboxUsers(Array.isArray(data) ? data : []);
+}
 
   async function fetchConversations(
     preferredConversationId?: number | null
@@ -272,6 +309,105 @@ export default function WhatsAppInboxPage() {
       markConversationRead(conversation),
     ]);
   }
+
+async function assignConversation(userId: number | null) {
+  if (
+    !profile?.company_id ||
+    !selectedConversation ||
+    profile.role === "ReadOnly"
+  ) {
+    return;
+  }
+
+  if (profile.role === "Sales") {
+    alert("Sales users cannot reassign conversations.");
+    return;
+  }
+
+  const selectedUser =
+    inboxUsers.find((user) => user.id === userId) || null;
+
+  setUpdatingConversation(true);
+
+  try {
+    const { error } = await supabase
+      .from("whatsapp_conversations")
+      .update({
+        assigned_user_id: selectedUser?.id || null,
+        assigned_user_name:
+          selectedUser?.full_name ||
+          selectedUser?.email ||
+          null,
+      })
+      .eq("id", selectedConversation.id)
+      .eq("company_id", profile.company_id);
+
+    if (error) {
+      alert("Error assigning conversation: " + error.message);
+      return;
+    }
+
+    await fetchConversations(selectedConversation.id);
+  } finally {
+    setUpdatingConversation(false);
+  }
+}
+
+async function changeConversationStatus(
+  status: "Open" | "Closed" | "Archived"
+) {
+  if (
+    !profile?.company_id ||
+    !selectedConversation ||
+    profile.role === "ReadOnly"
+  ) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    status === "Open"
+      ? "Reopen this WhatsApp conversation?"
+      : status === "Closed"
+      ? "Close this WhatsApp conversation?"
+      : "Archive this WhatsApp conversation?"
+  );
+
+  if (!confirmed) return;
+
+  setUpdatingConversation(true);
+
+  try {
+    const now = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("whatsapp_conversations")
+      .update({
+        status,
+        closed_at: status === "Open" ? null : now,
+        unread_count: status === "Open"
+          ? selectedConversation.unread_count
+          : 0,
+        waiting_for_response:
+          status === "Open"
+            ? selectedConversation.waiting_for_response
+            : false,
+      })
+      .eq("id", selectedConversation.id)
+      .eq("company_id", profile.company_id);
+
+    if (error) {
+      alert(
+        "Error updating conversation status: " +
+          error.message
+      );
+      return;
+    }
+
+    await fetchConversations(selectedConversation.id);
+  } finally {
+    setUpdatingConversation(false);
+  }
+}
 
   async function sendReply() {
     if (
@@ -429,10 +565,11 @@ export default function WhatsAppInboxPage() {
   }
 
   useEffect(() => {
-    if (!profile?.company_id) return;
+  if (!profile?.company_id) return;
 
-    fetchConversations();
-  }, [profile?.company_id, profile?.role, profile?.id]);
+  fetchConversations();
+  fetchInboxUsers();
+}, [profile?.company_id, profile?.role, profile?.id]);
 
   useEffect(() => {
     if (!selectedConversationId) return;
@@ -544,7 +681,7 @@ export default function WhatsAppInboxPage() {
                   className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"
                 />
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {STATUS_FILTERS.map((status) => (
                     <button
                       key={status}
@@ -716,11 +853,42 @@ export default function WhatsAppInboxPage() {
                             "No phone number"}
                         </p>
 
-                        <p className="mt-1 text-xs text-slate-400">
-                          Assigned to{" "}
-                          {selectedConversation.assigned_user_name ||
-                            "Unassigned"}
-                        </p>
+                        {profile?.role === "Admin" ||
+profile?.role === "Manager" ||
+profile?.role === "Finance" ? (
+  <div className="mt-3">
+    <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      Assigned To
+    </label>
+
+    <select
+      value={selectedConversation.assigned_user_id || ""}
+      disabled={updatingConversation}
+      onChange={(event) =>
+        assignConversation(
+          event.target.value
+            ? Number(event.target.value)
+            : null
+        )
+      }
+      className="mt-1 w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+    >
+      <option value="">Unassigned</option>
+
+      {inboxUsers.map((user) => (
+        <option key={user.id} value={user.id}>
+          {user.full_name || user.email} ({user.role})
+        </option>
+      ))}
+    </select>
+  </div>
+) : (
+  <p className="mt-1 text-xs text-slate-400">
+    Assigned to{" "}
+    {selectedConversation.assigned_user_name ||
+      "Unassigned"}
+  </p>
+)}
                       </div>
 
                       <div className="flex flex-wrap gap-2">
@@ -729,6 +897,53 @@ export default function WhatsAppInboxPage() {
                             Customer waiting
                           </span>
                         )}
+                        
+                        <span
+  className={`rounded-full px-3 py-2 text-xs font-semibold ${
+    selectedConversation.status === "Open"
+      ? "bg-green-100 text-green-700"
+      : selectedConversation.status === "Closed"
+      ? "bg-slate-200 text-slate-700"
+      : "bg-purple-100 text-purple-700"
+  }`}
+>
+  {selectedConversation.status}
+</span>
+
+<WriteAccessGuard>
+  {selectedConversation.status === "Open" ? (
+    <button
+      type="button"
+      disabled={updatingConversation}
+      onClick={() => changeConversationStatus("Closed")}
+      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+    >
+      Close
+    </button>
+  ) : (
+    <button
+      type="button"
+      disabled={updatingConversation}
+      onClick={() => changeConversationStatus("Open")}
+      className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+    >
+      Reopen
+    </button>
+  )}
+
+  {selectedConversation.status !== "Archived" && (
+    <button
+      type="button"
+      disabled={updatingConversation}
+      onClick={() =>
+        changeConversationStatus("Archived")
+      }
+      className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
+    >
+      Archive
+    </button>
+  )}
+</WriteAccessGuard>
 
                         {selectedConversation.lead_id && (
                           <Link
@@ -842,7 +1057,12 @@ export default function WhatsAppInboxPage() {
                   </div>
 
                   <div className="border-t border-slate-200 bg-white p-4">
-                    {selectedConversation.lead_id ? (
+                    {selectedConversation.status !== "Open" ? (
+  <div className="rounded-xl bg-slate-100 p-4 text-sm text-slate-600">
+    This conversation is {selectedConversation.status.toLowerCase()}.
+    Reopen it before sending another reply.
+  </div>
+) : selectedConversation.lead_id ? (
                       <WriteAccessGuard
                         fallback={
                           <div className="rounded-xl bg-slate-100 p-4 text-sm text-slate-500">
