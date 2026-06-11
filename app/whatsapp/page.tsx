@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
 import PageAccessGuard from "@/components/PageAccessGuard";
@@ -8,6 +13,7 @@ import ReadOnlyNotice from "@/components/ReadOnlyNotice";
 import WriteAccessGuard from "@/components/WriteAccessGuard";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/lib/supabaseClient";
+
 
 type Conversation = {
   id: number;
@@ -143,6 +149,9 @@ export default function WhatsAppInboxPage() {
   const [sendingMessage, setSendingMessage] = useState(false);
 const [inboxUsers, setInboxUsers] = useState<InboxUser[]>([]);
 const [updatingConversation, setUpdatingConversation] = useState(false);
+const [realtimeStatus, setRealtimeStatus] = useState<
+  "Connecting" | "Live" | "Disconnected" | "Error"
+>("Connecting");
   const [searchText, setSearchText] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<(typeof STATUS_FILTERS)[number]>("Open");
@@ -150,6 +159,7 @@ const [updatingConversation, setUpdatingConversation] = useState(false);
   const [showWaitingOnly, setShowWaitingOnly] = useState(false);
 
   const [replyText, setReplyText] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const selectedConversation =
     conversations.find(
@@ -301,14 +311,11 @@ async function fetchInboxUsers() {
   }
 
   async function openConversation(conversation: Conversation) {
-    setSelectedConversationId(conversation.id);
-    setReplyText("");
+  setSelectedConversationId(conversation.id);
+  setReplyText("");
 
-    await Promise.all([
-      fetchMessages(conversation.id),
-      markConversationRead(conversation),
-    ]);
-  }
+  await markConversationRead(conversation);
+}
 
 async function assignConversation(userId: number | null) {
   if (
@@ -548,10 +555,18 @@ async function changeConversationStatus(
         );
       }
 
-      setMessages((current) => [
-        ...current,
-        savedMessage as WhatsAppMessage,
-      ]);
+      setMessages((current) => {
+  const alreadyExists = current.some(
+    (message) => message.id === savedMessage.id
+  );
+
+  if (alreadyExists) return current;
+
+  return [
+    ...current,
+    savedMessage as WhatsAppMessage,
+  ];
+});
 
       setReplyText("");
 
@@ -571,11 +586,127 @@ async function changeConversationStatus(
   fetchInboxUsers();
 }, [profile?.company_id, profile?.role, profile?.id]);
 
+useEffect(() => {
+  messagesEndRef.current?.scrollIntoView({
+    behavior: "smooth",
+    block: "end",
+  });
+}, [messages]);
+
   useEffect(() => {
     if (!selectedConversationId) return;
 
     fetchMessages(selectedConversationId);
   }, [selectedConversationId, profile?.company_id]);
+
+useEffect(() => {
+  if (!profile?.company_id) return;
+
+  setRealtimeStatus("Connecting");
+
+  const conversationChannel = supabase
+    .channel(
+      `whatsapp-conversations-company-${profile.company_id}`
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "whatsapp_conversations",
+        filter: `company_id=eq.${profile.company_id}`,
+      },
+      async (payload) => {
+        const changedConversation =
+          (payload.new || payload.old) as Partial<Conversation>;
+
+        await fetchConversations(
+          changedConversation.id || selectedConversationId
+        );
+      }
+    )
+    .subscribe((status, error) => {
+      if (error) {
+        console.error(
+          "WhatsApp conversation Realtime error:",
+          error
+        );
+        setRealtimeStatus("Error");
+        return;
+      }
+
+      if (status === "SUBSCRIBED") {
+        setRealtimeStatus("Live");
+      } else if (
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT"
+      ) {
+        setRealtimeStatus("Error");
+      } else if (status === "CLOSED") {
+        setRealtimeStatus("Disconnected");
+      }
+    });
+
+  return () => {
+    supabase.removeChannel(conversationChannel);
+  };
+}, [
+  profile?.company_id,
+  profile?.role,
+  profile?.id,
+  selectedConversationId,
+]);
+
+useEffect(() => {
+  if (
+    !profile?.company_id ||
+    !selectedConversationId
+  ) {
+    return;
+  }
+
+  const messageChannel = supabase
+    .channel(
+      `whatsapp-messages-conversation-${selectedConversationId}`
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "whatsapp_messages",
+        filter: `conversation_id=eq.${selectedConversationId}`,
+      },
+      async () => {
+        await Promise.all([
+          fetchMessages(selectedConversationId),
+          fetchConversations(selectedConversationId),
+        ]);
+      }
+    )
+    .subscribe((status, error) => {
+      if (error) {
+        console.error(
+          "WhatsApp message Realtime error:",
+          error
+        );
+      }
+
+      if (
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT"
+      ) {
+        setRealtimeStatus("Error");
+      }
+    });
+
+  return () => {
+    supabase.removeChannel(messageChannel);
+  };
+}, [
+  profile?.company_id,
+  selectedConversationId,
+]);
 
   const filteredConversations = useMemo(() => {
     const search = searchText.trim().toLowerCase();
@@ -648,6 +779,32 @@ async function changeConversationStatus(
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <span
+  className={`rounded-full px-3 py-2 text-sm font-semibold ${
+    realtimeStatus === "Live"
+      ? "bg-green-100 text-green-700"
+      : realtimeStatus === "Connecting"
+      ? "bg-blue-100 text-blue-700"
+      : realtimeStatus === "Error"
+      ? "bg-red-100 text-red-700"
+      : "bg-slate-200 text-slate-700"
+  }`}
+>
+  <span
+    className={`mr-2 inline-block h-2 w-2 rounded-full ${
+      realtimeStatus === "Live"
+        ? "bg-green-600"
+        : realtimeStatus === "Connecting"
+        ? "bg-blue-600"
+        : realtimeStatus === "Error"
+        ? "bg-red-600"
+        : "bg-slate-500"
+    }`}
+  />
+
+  {realtimeStatus}
+</span>
+
               <span className="rounded-full bg-red-100 px-3 py-2 text-sm font-semibold text-red-700">
                 {unreadConversationCount} unread
               </span>
@@ -1052,6 +1209,7 @@ profile?.role === "Finance" ? (
                             </div>
                           );
                         })}
+                        <div ref={messagesEndRef} />
                       </div>
                     )}
                   </div>
