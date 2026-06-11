@@ -977,6 +977,11 @@ useEffect(() => {
                         </p>
 
                         <div className="mt-3 flex flex-wrap gap-2">
+                          {conversation.is_unmatched && (
+  <span className="rounded-full bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-700">
+    Unmatched Contact
+  </span>
+)}
                           {conversation.waiting_for_response && (
                             <span className="rounded-full bg-orange-100 px-2 py-1 text-[11px] font-semibold text-orange-700">
                               Waiting for response
@@ -1025,6 +1030,18 @@ useEffect(() => {
                           {selectedConversation.customer_phone ||
                             "No phone number"}
                         </p>
+                        {selectedConversation.is_unmatched && (
+  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3">
+    <p className="text-sm font-semibold text-red-700">
+      Unmatched WhatsApp Contact
+    </p>
+
+    <p className="mt-1 text-xs text-red-600">
+      This number is not linked to a CRM lead. Link it to an
+      existing lead or create a new lead before replying.
+    </p>
+  </div>
+)}
 
                         {profile?.role === "Admin" ||
 profile?.role === "Manager" ||

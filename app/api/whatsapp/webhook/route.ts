@@ -372,6 +372,187 @@ async function processStatusEvents(statuses: WhatsAppStatus[]) {
   return results;
 }
 
+async function saveUnmatchedInboundMessage({
+  companyId,
+  fromPhone,
+  customerName,
+  message,
+  messageDate,
+  metaMessageId,
+  messageDetails,
+}: {
+  companyId: number;
+  fromPhone: string;
+  customerName: string;
+  message: WhatsAppMessage;
+  messageDate: string;
+  metaMessageId: string | null;
+  messageDetails: ReturnType<typeof getMessageDetails>;
+}) {
+  const {
+    data: existingConversation,
+    error: conversationLookupError,
+  } = await supabaseAdmin
+    .from("whatsapp_conversations")
+    .select("id, unread_count")
+    .eq("company_id", companyId)
+    .eq("customer_phone", fromPhone)
+    .is("lead_id", null)
+    .eq("is_unmatched", true)
+    .maybeSingle();
+
+  if (conversationLookupError) {
+    console.error(
+      "Error finding unmatched WhatsApp conversation:",
+      conversationLookupError.message
+    );
+
+    return {
+      stored: false,
+      conversationId: null,
+      reason: conversationLookupError.message,
+    };
+  }
+
+  let conversationId: number;
+
+  if (existingConversation) {
+    conversationId = existingConversation.id;
+
+    const currentUnreadCount =
+      Number(existingConversation.unread_count) || 0;
+
+    const { error: conversationUpdateError } =
+      await supabaseAdmin
+        .from("whatsapp_conversations")
+        .update({
+          customer_name: customerName,
+          external_contact_name: customerName,
+          customer_phone: fromPhone,
+          last_message: messageDetails.text,
+          last_message_at: messageDate,
+          last_inbound_at: messageDate,
+          unread_count: currentUnreadCount + 1,
+          waiting_for_response: true,
+          status: "Open",
+          closed_at: null,
+          is_unmatched: true,
+        })
+        .eq("id", conversationId)
+        .eq("company_id", companyId);
+
+    if (conversationUpdateError) {
+      console.error(
+        "Error updating unmatched WhatsApp conversation:",
+        conversationUpdateError.message
+      );
+
+      return {
+        stored: false,
+        conversationId,
+        reason: conversationUpdateError.message,
+      };
+    }
+  } else {
+    const {
+      data: createdConversation,
+      error: conversationCreateError,
+    } = await supabaseAdmin
+      .from("whatsapp_conversations")
+      .insert({
+        company_id: companyId,
+        lead_id: null,
+        customer_name: customerName,
+        customer_phone: fromPhone,
+        external_contact_name: customerName,
+        assigned_user_id: null,
+        assigned_user_name: null,
+        last_message: messageDetails.text,
+        last_message_at: messageDate,
+        last_inbound_at: messageDate,
+        unread_count: 1,
+        waiting_for_response: true,
+        status: "Open",
+        closed_at: null,
+        is_unmatched: true,
+      })
+      .select("id")
+      .single();
+
+    if (
+      conversationCreateError ||
+      !createdConversation
+    ) {
+      console.error(
+        "Error creating unmatched WhatsApp conversation:",
+        conversationCreateError?.message ||
+          "Conversation was not returned"
+      );
+
+      return {
+        stored: false,
+        conversationId: null,
+        reason:
+          conversationCreateError?.message ||
+          "Conversation was not returned",
+      };
+    }
+
+    conversationId = createdConversation.id;
+  }
+
+  const { error: messageInsertError } =
+    await supabaseAdmin
+      .from("whatsapp_messages")
+      .insert({
+        company_id: companyId,
+        lead_id: null,
+        conversation_id: conversationId,
+        sender_type: "customer",
+        sender_name: customerName,
+        direction: "Inbound",
+        message: messageDetails.text,
+        message_type: message.type || "unknown",
+        meta_message_id: metaMessageId,
+        media_id: messageDetails.mediaId,
+        media_mime_type: messageDetails.mediaMimeType,
+        media_filename: messageDetails.mediaFilename,
+        media_caption: messageDetails.mediaCaption,
+        reply_to_meta_message_id:
+          message.context?.id || null,
+        delivery_status: "Received",
+        created_at: messageDate,
+      });
+
+  if (messageInsertError) {
+    console.error(
+      "Error saving unmatched inbound WhatsApp message:",
+      messageInsertError.message
+    );
+
+    return {
+      stored: false,
+      conversationId,
+      reason: messageInsertError.message,
+    };
+  }
+
+  console.log(
+    "WHATSAPP_UNMATCHED_MESSAGE_SAVED",
+    JSON.stringify({
+      companyId,
+      conversationId,
+      fromPhone,
+    })
+  );
+
+  return {
+    stored: true,
+    conversationId,
+    reason: null,
+  };
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
@@ -409,9 +590,11 @@ export async function POST(req: Request) {
 
     const value = body?.entry?.[0]?.changes?.[0]?.value;
 
-    const message: WhatsAppMessage | undefined =
-      value?.messages?.[0];
+const receivingPhoneNumberId =
+  value?.metadata?.phone_number_id || null;
 
+const message: WhatsAppMessage | undefined =
+  value?.messages?.[0];
     const statuses: WhatsAppStatus[] = Array.isArray(value?.statuses)
       ? value.statuses
       : [];
@@ -451,15 +634,65 @@ export async function POST(req: Request) {
     }
 
     if (!message) {
-      console.log("WHATSAPP_WEBHOOK_NO_INBOUND_MESSAGE");
+  console.log("WHATSAPP_WEBHOOK_NO_INBOUND_MESSAGE");
 
-      return NextResponse.json({
-        success: true,
-        event: "No inbound message",
-      });
-    }
+  return NextResponse.json({
+    success: true,
+    event: "No inbound message",
+  });
+}
 
-    const metaMessageId = message.id || null;
+if (!receivingPhoneNumberId) {
+  console.error(
+    "Inbound WhatsApp webhook is missing metadata.phone_number_id."
+  );
+
+  return NextResponse.json({
+    success: true,
+    stored: false,
+    reason: "Missing receiving phone number ID",
+  });
+}
+
+const { data: whatsappSettings, error: settingsError } =
+  await supabaseAdmin
+    .from("company_whatsapp_settings")
+    .select("company_id, phone_number_id, is_active")
+    .eq("phone_number_id", receivingPhoneNumberId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+if (settingsError) {
+  console.error(
+    "Error resolving WhatsApp company settings:",
+    settingsError.message
+  );
+
+  return NextResponse.json({
+    success: true,
+    stored: false,
+    reason: "Company lookup failed",
+  });
+}
+
+if (!whatsappSettings) {
+  console.error(
+    "No active company WhatsApp mapping found for phone number ID:",
+    receivingPhoneNumberId
+  );
+
+  return NextResponse.json({
+    success: true,
+    stored: false,
+    reason: "No company WhatsApp mapping",
+  });
+}
+
+const receivingCompanyId = Number(
+  whatsappSettings.company_id
+);
+
+const metaMessageId = message.id || null;
 
     if (metaMessageId) {
       const { data: existingMessage, error: duplicateCheckError } =
@@ -511,21 +744,22 @@ export async function POST(req: Request) {
         ? `0${fromPhone.slice(2)}`
         : fromPhone;
 
-    const { data: matchingLeads, error: leadError } =
-      await supabaseAdmin
-        .from("leads")
-        .select(
-          "id, company_id, customer, phone, assigned_user_id, assigned_user_name"
-        )
-        .or(
-          [
-            `phone.eq.${fromPhone}`,
-            `phone.eq.+${fromPhone}`,
-            `phone.eq.${localPhone}`,
-          ].join(",")
-        )
-        .order("id", { ascending: false })
-        .limit(2);
+  const { data: matchingLeads, error: leadError } =
+  await supabaseAdmin
+    .from("leads")
+    .select(
+      "id, company_id, customer, phone, assigned_user_id, assigned_user_name"
+    )
+    .eq("company_id", receivingCompanyId)
+    .or(
+      [
+        `phone.eq.${fromPhone}`,
+        `phone.eq.+${fromPhone}`,
+        `phone.eq.${localPhone}`,
+      ].join(",")
+    )
+    .order("id", { ascending: false })
+    .limit(2);
 
     if (leadError) {
       console.error(
@@ -540,30 +774,67 @@ export async function POST(req: Request) {
     }
 
     if (!matchingLeads || matchingLeads.length === 0) {
-      console.log(
-        "No matching lead found for WhatsApp phone:",
-        fromPhone
-      );
+  console.log(
+    "No matching lead found. Saving unmatched WhatsApp contact:",
+    fromPhone
+  );
 
-      return NextResponse.json({
-        success: true,
-        matched: false,
-      });
-    }
+  const unmatchedResult =
+    await saveUnmatchedInboundMessage({
+      companyId: receivingCompanyId,
+      fromPhone,
+      customerName,
+      message,
+      messageDate,
+      metaMessageId,
+      messageDetails,
+    });
+
+  return NextResponse.json({
+    success: true,
+    matched: false,
+    unmatched: true,
+    stored: unmatchedResult.stored,
+    conversationId:
+      unmatchedResult.conversationId,
+    reason: unmatchedResult.reason,
+  });
+}
 
     if (matchingLeads.length > 1) {
-      console.error(
-        "Multiple leads match inbound WhatsApp phone:",
-        fromPhone,
-        matchingLeads.map((item) => item.id)
-      );
+  console.error(
+    "Multiple leads match inbound WhatsApp phone. Saving as unmatched:",
+    fromPhone,
+    matchingLeads.map((item) => item.id)
+  );
 
-      return NextResponse.json({
-        success: true,
-        matched: false,
-        reason: "Multiple lead matches",
-      });
-    }
+  const unmatchedResult =
+    await saveUnmatchedInboundMessage({
+      companyId: receivingCompanyId,
+      fromPhone,
+      customerName,
+      message,
+      messageDate,
+      metaMessageId,
+      messageDetails,
+    });
+
+  return NextResponse.json({
+    success: true,
+    matched: false,
+    unmatched: true,
+    multipleLeadMatches: true,
+    candidateLeadIds: matchingLeads.map(
+      (item) => item.id
+    ),
+    stored: unmatchedResult.stored,
+    conversationId:
+      unmatchedResult.conversationId,
+    reason:
+      unmatchedResult.reason ||
+      "Multiple lead matches",
+  });
+}
 
     const lead = matchingLeads[0];
 
