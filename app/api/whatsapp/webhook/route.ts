@@ -57,6 +57,21 @@ type WhatsAppMessage = {
   };
 };
 
+type WhatsAppStatus = {
+  id?: string;
+  status?: string;
+  timestamp?: string;
+  recipient_id?: string;
+  errors?: Array<{
+    code?: number;
+    title?: string;
+    message?: string;
+    error_data?: {
+      details?: string;
+    };
+  }>;
+};
+
 function normalizePhone(phone: string | null | undefined) {
   if (!phone) return "";
 
@@ -67,6 +82,34 @@ function normalizePhone(phone: string | null | undefined) {
   }
 
   return cleaned;
+}
+
+function mapDeliveryStatus(status: string | null | undefined) {
+  switch ((status || "").toLowerCase()) {
+    case "sent":
+      return "Sent";
+    case "delivered":
+      return "Delivered";
+    case "read":
+      return "Read";
+    case "failed":
+      return "Failed";
+    default:
+      return null;
+  }
+}
+
+function getStatusErrorMessage(status: WhatsAppStatus) {
+  const firstError = status.errors?.[0];
+
+  if (!firstError) return null;
+
+  return (
+    firstError.error_data?.details ||
+    firstError.message ||
+    firstError.title ||
+    (firstError.code ? `WhatsApp error ${firstError.code}` : null)
+  );
 }
 
 function getMessageDetails(message: WhatsAppMessage) {
@@ -190,6 +233,145 @@ function getMessageDetails(message: WhatsAppMessage) {
   };
 }
 
+async function processStatusEvents(statuses: WhatsAppStatus[]) {
+  const results: Array<{
+    metaMessageId: string | null;
+    status: string | null;
+    updated: boolean;
+    reason?: string;
+  }> = [];
+
+  for (const statusEvent of statuses) {
+    const metaMessageId = statusEvent.id || null;
+    const mappedStatus = mapDeliveryStatus(statusEvent.status);
+
+    if (!metaMessageId || !mappedStatus) {
+      results.push({
+        metaMessageId,
+        status: mappedStatus,
+        updated: false,
+        reason: "Missing message ID or unsupported status",
+      });
+
+      continue;
+    }
+
+    const errorMessage =
+      mappedStatus === "Failed"
+        ? getStatusErrorMessage(statusEvent)
+        : null;
+
+    const { data: existingMessage, error: lookupError } =
+      await supabaseAdmin
+        .from("whatsapp_messages")
+        .select("id, delivery_status")
+        .eq("meta_message_id", metaMessageId)
+        .maybeSingle();
+
+    if (lookupError) {
+      console.error(
+        "Error finding WhatsApp message for status update:",
+        lookupError.message
+      );
+
+      results.push({
+        metaMessageId,
+        status: mappedStatus,
+        updated: false,
+        reason: lookupError.message,
+      });
+
+      continue;
+    }
+
+    if (!existingMessage) {
+      console.log(
+        "No CRM WhatsApp message found for Meta status:",
+        metaMessageId,
+        mappedStatus
+      );
+
+      results.push({
+        metaMessageId,
+        status: mappedStatus,
+        updated: false,
+        reason: "Message not found",
+      });
+
+      continue;
+    }
+
+    const statusRank: Record<string, number> = {
+      Pending: 0,
+      Sent: 1,
+      Delivered: 2,
+      Read: 3,
+      Failed: 4,
+      Received: 4,
+    };
+
+    const existingRank =
+      statusRank[existingMessage.delivery_status || "Pending"] ?? 0;
+
+    const incomingRank = statusRank[mappedStatus] ?? 0;
+
+    // Do not downgrade Read back to Delivered or Sent.
+    if (
+      mappedStatus !== "Failed" &&
+      incomingRank < existingRank
+    ) {
+      results.push({
+        metaMessageId,
+        status: mappedStatus,
+        updated: false,
+        reason: "Older status ignored",
+      });
+
+      continue;
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from("whatsapp_messages")
+      .update({
+        delivery_status: mappedStatus,
+        error_message: errorMessage,
+      })
+      .eq("id", existingMessage.id);
+
+    if (updateError) {
+      console.error(
+        "Error updating WhatsApp message delivery status:",
+        updateError.message
+      );
+
+      results.push({
+        metaMessageId,
+        status: mappedStatus,
+        updated: false,
+        reason: updateError.message,
+      });
+
+      continue;
+    }
+
+    console.log(
+      "WHATSAPP_STATUS_UPDATED",
+      JSON.stringify({
+        metaMessageId,
+        status: mappedStatus,
+      })
+    );
+
+    results.push({
+      metaMessageId,
+      status: mappedStatus,
+      updated: true,
+    });
+  }
+
+  return results;
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
@@ -225,6 +407,17 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
+    const value = body?.entry?.[0]?.changes?.[0]?.value;
+
+    const message: WhatsAppMessage | undefined =
+      value?.messages?.[0];
+
+    const statuses: WhatsAppStatus[] = Array.isArray(value?.statuses)
+      ? value.statuses
+      : [];
+
+    const contact = value?.contacts?.[0];
+
     console.log(
       "WHATSAPP_WEBHOOK_EVENT_SUMMARY",
       JSON.stringify({
@@ -234,33 +427,37 @@ export async function POST(req: Request) {
           : 0,
         field:
           body?.entry?.[0]?.changes?.[0]?.field || null,
-        hasMessages: Boolean(
-          body?.entry?.[0]?.changes?.[0]?.value?.messages?.length
-        ),
-        hasStatuses: Boolean(
-          body?.entry?.[0]?.changes?.[0]?.value?.statuses?.length
-        ),
+        hasMessages: Boolean(value?.messages?.length),
+        hasStatuses: statuses.length > 0,
+        statusCount: statuses.length,
       })
     );
 
-    const value = body?.entry?.[0]?.changes?.[0]?.value;
-    const message: WhatsAppMessage | undefined = value?.messages?.[0];
-    const contact = value?.contacts?.[0];
+    if (statuses.length > 0) {
+      const statusResults = await processStatusEvents(statuses);
 
-    // Meta also sends delivery/read status webhook events.
-    // Those will be handled in a later Phase 5 batch.
+      // A payload may theoretically contain other data too, so only
+      // return now when there is no inbound message to process.
+      if (!message) {
+        return NextResponse.json({
+          success: true,
+          event: "WhatsApp status update",
+          results: statusResults,
+        });
+      }
+    }
+
     if (!message) {
-  console.log("WHATSAPP_WEBHOOK_NO_INBOUND_MESSAGE");
+      console.log("WHATSAPP_WEBHOOK_NO_INBOUND_MESSAGE");
 
-  return NextResponse.json({
-    success: true,
-    event: "No inbound message",
-  });
-}
+      return NextResponse.json({
+        success: true,
+        event: "No inbound message",
+      });
+    }
 
     const metaMessageId = message.id || null;
 
-    // Meta may retry the same webhook. Do not process it twice.
     if (metaMessageId) {
       const { data: existingMessage, error: duplicateCheckError } =
         await supabaseAdmin
@@ -287,7 +484,9 @@ export async function POST(req: Request) {
     const fromPhone = normalizePhone(message.from);
 
     if (!fromPhone) {
-      console.error("Inbound WhatsApp message has no valid sender number.");
+      console.error(
+        "Inbound WhatsApp message has no valid sender number."
+      );
 
       return NextResponse.json({
         success: true,
@@ -309,19 +508,21 @@ export async function POST(req: Request) {
         ? `0${fromPhone.slice(2)}`
         : fromPhone;
 
-    const { data: lead, error: leadError } = await supabaseAdmin
-      .from("leads")
-      .select(
-        "id, company_id, customer, phone, assigned_user_id, assigned_user_name"
-      )
-      .or(
-        [
-          `phone.eq.${fromPhone}`,
-          `phone.eq.+${fromPhone}`,
-          `phone.eq.${localPhone}`,
-        ].join(",")
-      )
-      .maybeSingle();
+    const { data: matchingLeads, error: leadError } =
+      await supabaseAdmin
+        .from("leads")
+        .select(
+          "id, company_id, customer, phone, assigned_user_id, assigned_user_name"
+        )
+        .or(
+          [
+            `phone.eq.${fromPhone}`,
+            `phone.eq.+${fromPhone}`,
+            `phone.eq.${localPhone}`,
+          ].join(",")
+        )
+        .order("id", { ascending: false })
+        .limit(2);
 
     if (leadError) {
       console.error(
@@ -329,16 +530,13 @@ export async function POST(req: Request) {
         leadError.message
       );
 
-      // Return 200 so Meta does not continuously retry a database issue.
       return NextResponse.json({
         success: true,
         stored: false,
       });
     }
 
-    // Unmatched inbound contacts are handled in Phase 5E.
-    // For now, retain the existing behaviour without throwing an error.
-    if (!lead) {
+    if (!matchingLeads || matchingLeads.length === 0) {
       console.log(
         "No matching lead found for WhatsApp phone:",
         fromPhone
@@ -349,6 +547,22 @@ export async function POST(req: Request) {
         matched: false,
       });
     }
+
+    if (matchingLeads.length > 1) {
+      console.error(
+        "Multiple leads match inbound WhatsApp phone:",
+        fromPhone,
+        matchingLeads.map((item) => item.id)
+      );
+
+      return NextResponse.json({
+        success: true,
+        matched: false,
+        reason: "Multiple lead matches",
+      });
+    }
+
+    const lead = matchingLeads[0];
 
     const { data: existingConversation, error: conversationCheckError } =
       await supabaseAdmin
