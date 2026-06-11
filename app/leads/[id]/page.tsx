@@ -720,19 +720,32 @@ async function linkInventoryVehicleToLead() {
   const messageToSend = whatsappInput.trim();
 
   try {
-    const response = await fetch("/api/whatsapp/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        to,
-        message: messageToSend,
-        mode: "text",
-      }),
-    });
+   const {
+  data: sessionData,
+  error: sessionError,
+} = await supabase.auth.getSession();
+
+if (sessionError || !sessionData.session?.access_token) {
+  alert("Your login session has expired. Please sign in again.");
+  return;
+}
+
+const response = await fetch("/api/whatsapp/send", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${sessionData.session.access_token}`,
+  },
+  body: JSON.stringify({
+    leadId: lead.id,
+    message: messageToSend,
+    mode: "text",
+  }),
+});
 
     const result = await response.json();
+    const verifiedRecipient =
+  result?.recipient || normalizePhone(lead.phone);
 
     if (!response.ok) {
       alert(JSON.stringify(result, null, 2));
@@ -775,7 +788,7 @@ async function linkInventoryVehicleToLead() {
         .from("whatsapp_conversations")
         .update({
           customer_name: lead.customer,
-          customer_phone: to,
+          customer_phone: verifiedRecipient,
           assigned_user_id: lead.assigned_user_id,
           assigned_user_name: lead.assigned_user_name,
           last_message: messageToSend,
@@ -807,7 +820,7 @@ async function linkInventoryVehicleToLead() {
             company_id: profile.company_id,
             lead_id: lead.id,
             customer_name: lead.customer,
-            customer_phone: to,
+            customer_phone: verifiedRecipient,
             assigned_user_id: lead.assigned_user_id,
             assigned_user_name: lead.assigned_user_name,
             last_message: messageToSend,
