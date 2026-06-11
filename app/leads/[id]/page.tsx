@@ -701,24 +701,25 @@ async function linkInventoryVehicleToLead() {
   }
 
   async function sendWhatsappMessage() {
-    if (!lead || !profile?.company_id) return;
+  if (!lead || !profile?.company_id) return;
 
-    const to = normalizePhone(lead.phone);
+  const to = normalizePhone(lead.phone);
 
-    if (!to) {
-      alert("Customer phone number is missing.");
-      return;
-    }
+  if (!to) {
+    alert("Customer phone number is missing.");
+    return;
+  }
 
-    if (!whatsappInput.trim()) {
-      alert("Please type a WhatsApp message.");
-      return;
-    }
+  if (!whatsappInput.trim()) {
+    alert("Please type a WhatsApp message.");
+    return;
+  }
 
-    setSendingWhatsapp(true);
+  setSendingWhatsapp(true);
 
-    const messageToSend = whatsappInput.trim();
+  const messageToSend = whatsappInput.trim();
 
+  try {
     const response = await fetch("/api/whatsapp/send", {
       method: "POST",
       headers: {
@@ -735,8 +736,100 @@ async function linkInventoryVehicleToLead() {
 
     if (!response.ok) {
       alert(JSON.stringify(result, null, 2));
-      setSendingWhatsapp(false);
       return;
+    }
+
+    const metaMessageId =
+      result?.data?.messages?.[0]?.id || null;
+
+    const messageDate = new Date().toISOString();
+
+    const { data: existingConversation, error: conversationCheckError } =
+      await supabase
+        .from("whatsapp_conversations")
+        .select("id, first_response_at, last_inbound_at")
+        .eq("company_id", profile.company_id)
+        .eq("lead_id", lead.id)
+        .maybeSingle();
+
+    if (conversationCheckError) {
+      alert(
+        "Message sent, but conversation lookup failed: " +
+          conversationCheckError.message
+      );
+      return;
+    }
+
+    let conversationId: number;
+
+    if (existingConversation) {
+      conversationId = existingConversation.id;
+
+      const firstResponseAt =
+        !existingConversation.first_response_at &&
+        existingConversation.last_inbound_at
+          ? messageDate
+          : existingConversation.first_response_at;
+
+      const { error: conversationUpdateError } = await supabase
+        .from("whatsapp_conversations")
+        .update({
+          customer_name: lead.customer,
+          customer_phone: to,
+          assigned_user_id: lead.assigned_user_id,
+          assigned_user_name: lead.assigned_user_name,
+          last_message: messageToSend,
+          last_message_at: messageDate,
+          last_outbound_at: messageDate,
+          unread_count: 0,
+          waiting_for_response: false,
+          first_response_at: firstResponseAt,
+          last_read_at: messageDate,
+          status: "Open",
+          closed_at: null,
+          is_unmatched: false,
+        })
+        .eq("id", conversationId)
+        .eq("company_id", profile.company_id);
+
+      if (conversationUpdateError) {
+        alert(
+          "Message sent, but conversation update failed: " +
+            conversationUpdateError.message
+        );
+        return;
+      }
+    } else {
+      const { data: createdConversation, error: conversationCreateError } =
+        await supabase
+          .from("whatsapp_conversations")
+          .insert({
+            company_id: profile.company_id,
+            lead_id: lead.id,
+            customer_name: lead.customer,
+            customer_phone: to,
+            assigned_user_id: lead.assigned_user_id,
+            assigned_user_name: lead.assigned_user_name,
+            last_message: messageToSend,
+            last_message_at: messageDate,
+            last_outbound_at: messageDate,
+            unread_count: 0,
+            waiting_for_response: false,
+            status: "Open",
+            is_unmatched: false,
+          })
+          .select("id")
+          .single();
+
+      if (conversationCreateError || !createdConversation) {
+        alert(
+          "Message sent, but conversation creation failed: " +
+            (conversationCreateError?.message || "Unknown error")
+        );
+        return;
+      }
+
+      conversationId = createdConversation.id;
     }
 
     const { data: savedMessage, error: saveError } = await supabase
@@ -744,26 +837,52 @@ async function linkInventoryVehicleToLead() {
       .insert({
         company_id: profile.company_id,
         lead_id: lead.id,
+        conversation_id: conversationId,
         sender_type: "user",
-        sender_name: profile.full_name,
+        sender_name:
+          profile.full_name || profile.email || "Unknown User",
+        direction: "Outbound",
         message: messageToSend,
+        message_type: "text",
+        meta_message_id: metaMessageId,
+        delivery_status: "Sent",
+        created_at: messageDate,
       })
       .select("*")
       .single();
 
     if (saveError) {
-      alert("Message sent, but failed to save in CRM: " + saveError.message);
+      alert(
+        "Message sent, but failed to save in CRM: " +
+          saveError.message
+      );
+      return;
     }
 
-    await addActivity("WhatsApp Sent", messageToSend, "whatsapp", "green");
+    await addActivity(
+      "WhatsApp Sent",
+      messageToSend,
+      "whatsapp",
+      "green"
+    );
 
     if (savedMessage) {
-      setWhatsappMessages((prev) => [...prev, savedMessage]);
+      setWhatsappMessages((current) => [
+        ...current,
+        savedMessage,
+      ]);
     }
 
     setWhatsappInput("");
+
+    alert("WhatsApp message sent successfully.");
+  } catch (error) {
+    console.error("Unexpected WhatsApp send error:", error);
+    alert("Unexpected error sending WhatsApp message.");
+  } finally {
     setSendingWhatsapp(false);
   }
+}
 
   async function submitToFinance() {
     if (!lead) return;
