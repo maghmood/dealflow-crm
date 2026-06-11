@@ -8,11 +8,12 @@ import { canAccessRole } from "@/lib/auth";
 import { useAuth } from "@/components/AuthProvider";
 
 type NotificationItem = {
-  id: number;
+  id: string;
   title: string;
   message: string;
   href: string;
-  severity: "red" | "orange" | "blue";
+  severity: "red" | "orange" | "blue" | "green";
+  source: "task" | "whatsapp";
 };
 
 type Company = {
@@ -112,32 +113,58 @@ export default function DashboardLayout({
   ];
 
   async function fetchNotifications() {
-    if (!profile?.company_id) return;
+  if (!profile?.company_id) return;
 
-    let query = supabase
-      .from("tasks")
-      .select("id, title, due_date, status, lead_id, assigned_user_id")
-      .eq("company_id", profile.company_id)
-      .neq("status", "Completed")
-      .order("due_date", { ascending: true });
+  let taskQuery = supabase
+    .from("tasks")
+    .select(
+      "id, title, due_date, status, lead_id, assigned_user_id"
+    )
+    .eq("company_id", profile.company_id)
+    .neq("status", "Completed")
+    .order("due_date", { ascending: true });
 
-    if (profile.role === "Sales") {
-      query = query.eq("assigned_user_id", profile.id);
-    }
+  let whatsappQuery = supabase
+    .from("whatsapp_conversations")
+    .select(
+      "id, lead_id, customer_name, external_contact_name, last_message, last_message_at, unread_count, waiting_for_response, assigned_user_id, status"
+    )
+    .eq("company_id", profile.company_id)
+    .eq("status", "Open")
+    .or("unread_count.gt.0,waiting_for_response.eq.true")
+    .order("last_message_at", { ascending: false });
 
-    const { data, error } = await query;
+  if (profile.role === "Sales") {
+    taskQuery = taskQuery.eq("assigned_user_id", profile.id);
 
-    if (error) {
-      console.error("Error loading notifications:", error.message);
-      setNotifications([]);
-      return;
-    }
+    whatsappQuery = whatsappQuery.eq(
+      "assigned_user_id",
+      profile.id
+    );
+  }
 
+  const [taskResult, whatsappResult] = await Promise.all([
+    taskQuery,
+    whatsappQuery,
+  ]);
+
+  const items: NotificationItem[] = [];
+
+  if (taskResult.error) {
+    console.error(
+      "Error loading task notifications:",
+      taskResult.error.message
+    );
+  } else {
     const now = new Date();
 
-    const items: NotificationItem[] = (data || [])
+    const taskItems: NotificationItem[] = (
+      taskResult.data || []
+    )
       .map((task: any) => {
-        const dueDate = task.due_date ? new Date(task.due_date) : null;
+        const dueDate = task.due_date
+          ? new Date(task.due_date)
+          : null;
 
         if (!dueDate) return null;
 
@@ -151,17 +178,61 @@ export default function DashboardLayout({
         if (!isOverdue && !isDueToday) return null;
 
         return {
-          id: task.id,
-          title: isOverdue ? "Overdue Task" : "Task Due Today",
+          id: `task-${task.id}`,
+          title: isOverdue
+            ? "Overdue Task"
+            : "Task Due Today",
           message: task.title,
-          href: task.lead_id ? `/leads/${task.lead_id}` : "/tasks",
+          href: task.lead_id
+            ? `/leads/${task.lead_id}`
+            : "/tasks",
           severity: isOverdue ? "red" : "orange",
-        };
+          source: "task",
+        } satisfies NotificationItem;
       })
       .filter(Boolean) as NotificationItem[];
 
-    setNotifications(items);
+    items.push(...taskItems);
   }
+
+  if (whatsappResult.error) {
+    console.error(
+      "Error loading WhatsApp notifications:",
+      whatsappResult.error.message
+    );
+  } else {
+    const whatsappItems: NotificationItem[] = (
+      whatsappResult.data || []
+    ).map((conversation: any) => {
+      const customerName =
+        conversation.customer_name ||
+        conversation.external_contact_name ||
+        "WhatsApp Customer";
+
+      const unreadCount =
+        Number(conversation.unread_count) || 0;
+
+      const isUnread = unreadCount > 0;
+
+      return {
+        id: `whatsapp-${conversation.id}`,
+        title: isUnread
+          ? `Unread WhatsApp${unreadCount > 1 ? ` (${unreadCount})` : ""}`
+          : "Customer Waiting",
+        message:
+          conversation.last_message ||
+          `${customerName} is waiting for a reply.`,
+        href: `/whatsapp?conversation=${conversation.id}`,
+        severity: isUnread ? "green" : "orange",
+        source: "whatsapp",
+      };
+    });
+
+    items.push(...whatsappItems);
+  }
+
+  setNotifications(items);
+}
 
   async function fetchBranding() {
     const companyId = profile?.company_id || 1;
@@ -209,6 +280,53 @@ export default function DashboardLayout({
       );
     };
   }, [profile?.company_id, profile?.role, profile?.id]);
+
+useEffect(() => {
+  if (!profile?.company_id) return;
+
+  const whatsappNotificationChannel = supabase
+    .channel(
+      `layout-whatsapp-notifications-${profile.company_id}-${profile.id}`
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "whatsapp_conversations",
+        filter: `company_id=eq.${profile.company_id}`,
+      },
+      () => {
+        fetchNotifications();
+      }
+    )
+    .subscribe((status, error) => {
+      if (error) {
+        console.error(
+          "WhatsApp notification Realtime error:",
+          error
+        );
+      }
+
+      if (
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT"
+      ) {
+        console.error(
+          "WhatsApp notification channel status:",
+          status
+        );
+      }
+    });
+
+  return () => {
+    supabase.removeChannel(whatsappNotificationChannel);
+  };
+}, [
+  profile?.company_id,
+  profile?.role,
+  profile?.id,
+]);
 
   const primaryColor = branding.primary_color || "#0f172a";
   const accentColor = branding.accent_color || "#2563eb";
@@ -334,8 +452,8 @@ export default function DashboardLayout({
                           </h3>
 
                           <p className="mt-1 text-sm text-slate-500">
-                            Tasks and follow-ups needing attention
-                          </p>
+  Tasks, follow-ups and customer messages needing attention
+</p>
                         </div>
 
                         <div className="rounded-full bg-red-50 px-3 py-1 text-sm font-semibold text-red-600">
@@ -363,27 +481,31 @@ export default function DashboardLayout({
                         <div className="space-y-4">
                           {notifications.map((notification) => (
                             <Link
-                              key={`${notification.title}-${notification.id}`}
+                              key={notification.id}
                               href={notification.href}
                               onClick={() => setShowNotifications(false)}
                               className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
                             >
                               <div className="flex items-start gap-4">
                                 <div
-                                  className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${
-                                    notification.severity === "red"
-                                      ? "bg-red-100 text-red-600"
-                                      : notification.severity === "orange"
-                                      ? "bg-orange-100 text-orange-600"
-                                      : "bg-blue-100 text-blue-600"
-                                  }`}
-                                >
-                                  {notification.severity === "red"
-                                    ? "⚠️"
-                                    : notification.severity === "orange"
-                                    ? "⏰"
-                                    : "🔔"}
-                                </div>
+  className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${
+    notification.severity === "red"
+      ? "bg-red-100 text-red-600"
+      : notification.severity === "orange"
+      ? "bg-orange-100 text-orange-600"
+      : notification.severity === "green"
+      ? "bg-green-100 text-green-600"
+      : "bg-blue-100 text-blue-600"
+  }`}
+>
+  {notification.source === "whatsapp"
+    ? "💬"
+    : notification.severity === "red"
+    ? "⚠️"
+    : notification.severity === "orange"
+    ? "⏰"
+    : "🔔"}
+</div>
 
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-start justify-between gap-3">

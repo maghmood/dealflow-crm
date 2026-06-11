@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import PageAccessGuard from "@/components/PageAccessGuard";
 import ReadOnlyNotice from "@/components/ReadOnlyNotice";
@@ -137,7 +138,11 @@ function deliveryStatusLabel(status: WhatsAppMessage["delivery_status"]) {
 
 export default function WhatsAppInboxPage() {
   const { profile } = useAuth();
+  const searchParams = useSearchParams();
 
+const requestedConversationId = Number(
+  searchParams.get("conversation")
+);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<
     number | null
@@ -582,9 +587,20 @@ async function changeConversationStatus(
   useEffect(() => {
   if (!profile?.company_id) return;
 
-  fetchConversations();
+  fetchConversations(
+    Number.isInteger(requestedConversationId) &&
+      requestedConversationId > 0
+      ? requestedConversationId
+      : null
+  );
+
   fetchInboxUsers();
-}, [profile?.company_id, profile?.role, profile?.id]);
+}, [
+  profile?.company_id,
+  profile?.role,
+  profile?.id,
+  requestedConversationId,
+]);
 
 useEffect(() => {
   messagesEndRef.current?.scrollIntoView({
