@@ -93,6 +93,26 @@ type CallLog = {
   created_at: string;
 };
 
+
+type AffordabilityAssessment = {
+  id: number;
+  company_id: number;
+  lead_id: number;
+  created_by_id: number | null;
+  created_by_name: string | null;
+  target_monthly_installment: number;
+  deposit_amount: number;
+  interest_rate: number;
+  term_months: number;
+  balloon_percentage: number;
+  maximum_vehicle_price: number;
+  selected_vehicle_id: number | null;
+  selected_vehicle_price: number | null;
+  estimated_installment: number | null;
+  notes: string | null;
+  created_at: string;
+};
+
 type StatusBucket = {
   label: string;
   count: number;
@@ -110,6 +130,8 @@ type SalespersonSummary = {
   calls: number;
   answeredCalls: number;
   callbacksRequired: number;
+    affordabilityAssessments: number;
+  matchedAssessments: number;
 };
 
 type TrendMonth = {
@@ -302,6 +324,9 @@ export default function ReportsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
 const [callLogs, setCallLogs] = useState<CallLog[]>([]);
+const [affordabilityAssessments, setAffordabilityAssessments] = useState<
+  AffordabilityAssessment[]
+>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState("All Time");
 
@@ -314,7 +339,7 @@ function exportFullReportPdf() {
 
     setLoading(true);
 
-    const [
+   const [
   leadsResult,
   dealsResult,
   inventoryResult,
@@ -322,6 +347,7 @@ function exportFullReportPdf() {
   tasksResult,
   documentsResult,
   callLogsResult,
+  affordabilityResult,
 ] = await Promise.all([
       supabase
         .from("leads")
@@ -376,6 +402,14 @@ function exportFullReportPdf() {
   )
   .eq("company_id", profile.company_id)
   .order("called_at", { ascending: false }),  
+
+supabase
+  .from("lead_affordability_assessments")
+  .select(
+    "id, company_id, lead_id, created_by_id, created_by_name, target_monthly_installment, deposit_amount, interest_rate, term_months, balloon_percentage, maximum_vehicle_price, selected_vehicle_id, selected_vehicle_price, estimated_installment, notes, created_at"
+  )
+  .eq("company_id", profile.company_id)
+  .order("created_at", { ascending: false }),
 
     ]);
 
@@ -448,6 +482,20 @@ if (callLogsResult.error) {
   );
 }
 
+if (affordabilityResult.error) {
+  console.error(
+    "Error loading affordability report:",
+    affordabilityResult.error.message
+  );
+  setAffordabilityAssessments([]);
+} else {
+  setAffordabilityAssessments(
+    Array.isArray(affordabilityResult.data)
+      ? affordabilityResult.data
+      : []
+  );
+}
+
     setLoading(false);
   }
 
@@ -459,6 +507,9 @@ if (callLogsResult.error) {
     () => leads.filter((item) => isDateInFilter(item.created_at, dateFilter)),
     [leads, dateFilter]
   );
+
+
+
 
   const filteredDeals = useMemo(
     () => deals.filter((item) => isDateInFilter(item.created_at, dateFilter)),
@@ -491,6 +542,14 @@ const filteredCallLogs = useMemo(
       isDateInFilter(item.called_at, dateFilter)
     ),
   [callLogs, dateFilter]
+);
+
+const filteredAffordabilityAssessments = useMemo(
+  () =>
+    affordabilityAssessments.filter((item) =>
+      isDateInFilter(item.created_at, dateFilter)
+    ),
+  [affordabilityAssessments, dateFilter]
 );
   
   const now = new Date();
@@ -611,6 +670,55 @@ const callOutcomeBuckets = groupCount(
   "Unknown"
 );
 
+const totalAffordabilityAssessments =
+  filteredAffordabilityAssessments.length;
+
+const assessmentsWithMatchedVehicles =
+  filteredAffordabilityAssessments.filter(
+    (assessment) => assessment.selected_vehicle_id !== null
+  ).length;
+
+const affordabilityMatchRate = percentage(
+  assessmentsWithMatchedVehicles,
+  totalAffordabilityAssessments
+);
+
+const averageTargetInstallment =
+  totalAffordabilityAssessments > 0
+    ? filteredAffordabilityAssessments.reduce(
+        (sum, assessment) =>
+          sum + Number(assessment.target_monthly_installment || 0),
+        0
+      ) / totalAffordabilityAssessments
+    : 0;
+
+const averageMaximumVehiclePrice =
+  totalAffordabilityAssessments > 0
+    ? filteredAffordabilityAssessments.reduce(
+        (sum, assessment) =>
+          sum + Number(assessment.maximum_vehicle_price || 0),
+        0
+      ) / totalAffordabilityAssessments
+    : 0;
+
+const averageDeposit =
+  totalAffordabilityAssessments > 0
+    ? filteredAffordabilityAssessments.reduce(
+        (sum, assessment) =>
+          sum + Number(assessment.deposit_amount || 0),
+        0
+      ) / totalAffordabilityAssessments
+    : 0;
+
+const averageBalloonPercentage =
+  totalAffordabilityAssessments > 0
+    ? filteredAffordabilityAssessments.reduce(
+        (sum, assessment) =>
+          sum + Number(assessment.balloon_percentage || 0),
+        0
+      ) / totalAffordabilityAssessments
+    : 0;
+
   const conversionLeadToDeal = percentage(totalDeals, totalLeads);
   const conversionDealToFinance = percentage(financeApprovedDeals, totalDeals);
   const conversionFinanceToDelivered = percentage(
@@ -687,6 +795,8 @@ const callOutcomeBuckets = groupCount(
           calls: 0,
 answeredCalls: 0,
 callbacksRequired: 0,
+affordabilityAssessments: 0,
+matchedAssessments: 0,
         });
       }
 
@@ -725,6 +835,8 @@ callbacksRequired: 0,
           calls: 0,
 answeredCalls: 0,
 callbacksRequired: 0,
+affordabilityAssessments: 0,
+matchedAssessments: 0,
         });
       }
 
@@ -755,6 +867,8 @@ filteredCallLogs.forEach((call) => {
       calls: 0,
       answeredCalls: 0,
       callbacksRequired: 0,
+      affordabilityAssessments: 0,
+matchedAssessments: 0,
     });
   }
 
@@ -771,8 +885,48 @@ filteredCallLogs.forEach((call) => {
   }
 });
 
+
+filteredAffordabilityAssessments.forEach((assessment) => {
+  const key = String(
+    assessment.created_by_id ||
+      assessment.created_by_name ||
+      "Unassigned"
+  );
+
+  if (!map.has(key)) {
+    map.set(key, {
+      name: assessment.created_by_name || "Unassigned",
+      userId: assessment.created_by_id,
+      leads: 0,
+      openLeads: 0,
+      deliveredLeads: 0,
+      deals: 0,
+      deliveredDeals: 0,
+      dealValue: 0,
+      calls: 0,
+      answeredCalls: 0,
+      callbacksRequired: 0,
+      affordabilityAssessments: 0,
+      matchedAssessments: 0,
+    });
+  }
+
+  const summary = map.get(key)!;
+
+  summary.affordabilityAssessments += 1;
+
+  if (assessment.selected_vehicle_id !== null) {
+    summary.matchedAssessments += 1;
+  }
+});
+
     return Array.from(map.values()).sort((a, b) => b.dealValue - a.dealValue);
-  }, [filteredLeads, filteredDeals, filteredCallLogs]);
+  }, [
+  filteredLeads,
+  filteredDeals,
+  filteredCallLogs,
+  filteredAffordabilityAssessments,
+]);
 
 function exportLeadsCsv() {
   downloadCsv(
@@ -866,8 +1020,51 @@ Calls: person.calls,
 "Answered Calls": person.answeredCalls,
 "Answered Rate %": percentage(person.answeredCalls, person.calls),
 "Callbacks Required": person.callbacksRequired,
+"Affordability Assessments": person.affordabilityAssessments,
+"Assessments With Vehicle": person.matchedAssessments,
+"Affordability Match Rate %": percentage(
+  person.matchedAssessments,
+  person.affordabilityAssessments
+),
 "Lead to Deal %": percentage(person.deals, person.leads),
       "Deal to Delivered %": percentage(person.deliveredDeals, person.deals),
+    }))
+  );
+}
+
+
+function exportAffordabilityCsv() {
+  downloadCsv(
+    `dealflow-affordability-report-${exportDateStamp()}.csv`,
+    filteredAffordabilityAssessments.map((assessment) => ({
+      "Assessment ID": assessment.id,
+      "Lead ID": assessment.lead_id,
+      "Created By": assessment.created_by_name || "Unknown User",
+      "Target Monthly Instalment": Number(
+        assessment.target_monthly_installment
+      ),
+      Deposit: Number(assessment.deposit_amount),
+      "Interest Rate %": Number(assessment.interest_rate),
+      "Term Months": assessment.term_months,
+      "Balloon %": Number(assessment.balloon_percentage),
+      "Maximum Vehicle Price": Number(
+        assessment.maximum_vehicle_price
+      ),
+      "Vehicle Selected":
+        assessment.selected_vehicle_id !== null ? "Yes" : "No",
+      "Selected Vehicle ID": assessment.selected_vehicle_id || "",
+      "Selected Vehicle Price":
+        assessment.selected_vehicle_price !== null
+          ? Number(assessment.selected_vehicle_price)
+          : "",
+      "Estimated Instalment":
+        assessment.estimated_installment !== null
+          ? Number(assessment.estimated_installment)
+          : "",
+      Notes: assessment.notes || "",
+      "Assessment Date": assessment.created_at
+        ? new Date(assessment.created_at).toLocaleString("en-ZA")
+        : "",
     }))
   );
 }
@@ -928,7 +1125,7 @@ Calls: person.calls,
       </p>
     </div>
 
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
       <button
         onClick={exportLeadsCsv}
         className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
@@ -955,6 +1152,13 @@ Calls: person.calls,
   className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-100"
 >
   Export Calls
+</button>
+
+<button
+  onClick={exportAffordabilityCsv}
+  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+>
+  Export Affordability
 </button>
 
       <button
@@ -1029,6 +1233,30 @@ Calls: person.calls,
 <MetricCard
   label="Callbacks Required"
   value={callbacksRequired}
+  color="orange"
+/>
+
+<MetricCard
+  label="Affordability Assessments"
+  value={totalAffordabilityAssessments}
+  color="orange"
+/>
+
+<MetricCard
+  label="Vehicle Match Rate"
+  value={`${affordabilityMatchRate}%`}
+  color="green"
+/>
+
+<MetricCard
+  label="Average Target Instalment"
+  value={formatRand(averageTargetInstallment)}
+  color="blue"
+/>
+
+<MetricCard
+  label="Average Maximum Price"
+  value={formatRand(averageMaximumVehiclePrice)}
   color="orange"
 />
 
@@ -1210,6 +1438,119 @@ Calls: person.calls,
       />
     </div>
   </ReportCard>
+
+<div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+  <ReportCard title="Affordability Performance">
+    <div className="space-y-3">
+      <SnapshotRow
+        label="Assessments Completed"
+        value={totalAffordabilityAssessments}
+      />
+
+      <SnapshotRow
+        label="Assessments With Vehicle"
+        value={assessmentsWithMatchedVehicles}
+      />
+
+      <SnapshotRow
+        label="Vehicle Match Rate"
+        value={`${affordabilityMatchRate}%`}
+      />
+
+      <SnapshotRow
+        label="Average Target Instalment"
+        value={formatRand(averageTargetInstallment)}
+      />
+
+      <SnapshotRow
+        label="Average Maximum Price"
+        value={formatRand(averageMaximumVehiclePrice)}
+      />
+
+      <SnapshotRow
+        label="Average Deposit"
+        value={formatRand(averageDeposit)}
+      />
+
+      <SnapshotRow
+        label="Average Balloon"
+        value={`${averageBalloonPercentage.toFixed(1)}%`}
+      />
+    </div>
+  </ReportCard>
+
+  <ReportCard title="Recent Affordability Assessments">
+    <div className="space-y-3">
+      {filteredAffordabilityAssessments.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+          <p className="text-sm font-semibold text-slate-700">
+            No affordability assessments found.
+          </p>
+        </div>
+      ) : (
+        filteredAffordabilityAssessments
+          .slice(0, 5)
+          .map((assessment) => (
+            <div
+              key={assessment.id}
+              className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">
+                    Lead #{assessment.lead_id}
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-600">
+                    Maximum price:{" "}
+                    {formatRand(assessment.maximum_vehicle_price)}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Target:{" "}
+                    {formatRand(
+                      assessment.target_monthly_installment
+                    )}
+                    /month
+                  </p>
+                </div>
+
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    assessment.selected_vehicle_id !== null
+                      ? "bg-green-100 text-green-700"
+                      : "bg-orange-100 text-orange-700"
+                  }`}
+                >
+                  {assessment.selected_vehicle_id !== null
+                    ? "Vehicle Matched"
+                    : "No Vehicle"}
+                </span>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3">
+                <p className="text-xs text-slate-500">
+                  {assessment.created_by_name || "Unknown User"}
+                </p>
+
+                <p className="text-xs text-slate-400">
+                  {formatDate(assessment.created_at)}
+                </p>
+              </div>
+
+              <Link
+                href={`/leads/${assessment.lead_id}`}
+                className="mt-3 inline-flex rounded-lg bg-orange-500 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-400"
+              >
+                Open Lead
+              </Link>
+            </div>
+          ))
+      )}
+    </div>
+  </ReportCard>
+</div>
+
 </div>
             <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
               <div className="print-section print-page rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -1225,7 +1566,7 @@ Calls: person.calls,
                 </div>
 
                 <div className="mt-5 overflow-x-auto">
-                  <table className="min-w-[1150px]">
+                  <table className="min-w-[1450px]">
                     <thead className="bg-slate-50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
@@ -1254,6 +1595,19 @@ Calls: person.calls,
 <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
   Answer Rate
 </th>
+
+<th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+  Assessments
+</th>
+
+<th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+  Vehicle Matches
+</th>
+
+<th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+  Match Rate
+</th>
+
                         <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
                           Deal Value
                         </th>
@@ -1283,6 +1637,17 @@ Calls: person.calls,
                           <td className="px-4 py-4 text-slate-700">
                             {person.deliveredDeals}
                           </td>
+                          <td className="px-4 py-4 text-slate-700">
+  {person.calls}
+</td>
+
+<td className="px-4 py-4 text-slate-700">
+  {person.answeredCalls}
+</td>
+
+<td className="px-4 py-4 text-slate-700">
+  {percentage(person.answeredCalls, person.calls)}%
+</td>
                           <td className="px-4 py-4 text-slate-700">
   {person.calls}
 </td>
@@ -1343,7 +1708,12 @@ Calls: person.calls,
                       value={financeSubmitted}
                     />
                     <SnapshotRow label="Lost Deals" value={lostDeals} />
-                    
+                    <SnapshotRow label="Total Calls" value={totalCalls} />
+<SnapshotRow label="Answered Rate" value={`${answeredRate}%`} />
+<SnapshotRow
+  label="Callbacks Required"
+  value={callbacksRequired}
+/>
                   </div>
                 </ReportCard>
 
@@ -1432,6 +1802,13 @@ Calls: person.calls,
                     period. The 6-month trend always shows recent monthly
                     activity from live CRM data.
                   </p>
+
+                  <p>
+  The date filter applies to the created/submitted date for leads,
+  deals, inventory, finance applications, documents, calls and
+  affordability assessments. Task counts are shown as current
+  operational totals.
+</p>
                 </div>
               </div>
             </div>
