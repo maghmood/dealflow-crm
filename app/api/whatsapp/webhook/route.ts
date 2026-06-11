@@ -217,8 +217,31 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  console.log(
+    "WHATSAPP_WEBHOOK_POST_RECEIVED",
+    new Date().toISOString()
+  );
+
   try {
     const body = await req.json();
+
+    console.log(
+      "WHATSAPP_WEBHOOK_EVENT_SUMMARY",
+      JSON.stringify({
+        object: body?.object || null,
+        entryCount: Array.isArray(body?.entry)
+          ? body.entry.length
+          : 0,
+        field:
+          body?.entry?.[0]?.changes?.[0]?.field || null,
+        hasMessages: Boolean(
+          body?.entry?.[0]?.changes?.[0]?.value?.messages?.length
+        ),
+        hasStatuses: Boolean(
+          body?.entry?.[0]?.changes?.[0]?.value?.statuses?.length
+        ),
+      })
+    );
 
     const value = body?.entry?.[0]?.changes?.[0]?.value;
     const message: WhatsAppMessage | undefined = value?.messages?.[0];
@@ -227,11 +250,13 @@ export async function POST(req: Request) {
     // Meta also sends delivery/read status webhook events.
     // Those will be handled in a later Phase 5 batch.
     if (!message) {
-      return NextResponse.json({
-        success: true,
-        event: "No inbound message",
-      });
-    }
+  console.log("WHATSAPP_WEBHOOK_NO_INBOUND_MESSAGE");
+
+  return NextResponse.json({
+    success: true,
+    event: "No inbound message",
+  });
+}
 
     const metaMessageId = message.id || null;
 
