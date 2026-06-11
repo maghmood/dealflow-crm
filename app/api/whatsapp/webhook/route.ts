@@ -435,6 +435,7 @@ export async function POST(req: Request) {
   })
 );
 
+
     if (statuses.length > 0) {
       const statusResults = await processStatusEvents(statuses);
 
