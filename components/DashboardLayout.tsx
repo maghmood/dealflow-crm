@@ -86,6 +86,10 @@ export default function DashboardLayout({
       ? [{ label: "Customers", href: "/customers" }]
       : []),
 
+      ...(canAccessRole(profile?.role, "whatsapp")
+  ? [{ label: "WhatsApp Inbox", href: "/whatsapp" }]
+  : []),
+
     ...(canAccessRole(profile?.role, "inventory")
       ? [{ label: "Inventory", href: "/inventory" }]
       : []),

@@ -14,6 +14,7 @@ export type AppModule =
   | "tasks"
   | "calendar"
   | "customers"
+  | "whatsapp"
   | "finance"
   | "documents"
   | "inventory"
@@ -38,6 +39,7 @@ const permissions: Record<UserRole, AppModule[]> = {
     "reports",
     "settings",
     "userManagement",
+    "whatsapp",
   ],
 
   Manager: [
@@ -54,6 +56,7 @@ const permissions: Record<UserRole, AppModule[]> = {
     "deals",
     "reports",
     "settings",
+    "whatsapp",
   ],
 
   Sales: [
@@ -67,6 +70,7 @@ const permissions: Record<UserRole, AppModule[]> = {
     "documents",
     "inventory",
     "deals",
+    "whatsapp",
   ],
 
   Finance: [
@@ -80,6 +84,7 @@ const permissions: Record<UserRole, AppModule[]> = {
     "inventory",
     "deals",
     "reports",
+    "whatsapp",
   ],
 
   Stock: [
@@ -104,6 +109,7 @@ const permissions: Record<UserRole, AppModule[]> = {
     "inventory",
     "deals",
     "reports",
+    "whatsapp",
   ],
 };
 
