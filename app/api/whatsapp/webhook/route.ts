@@ -419,19 +419,21 @@ export async function POST(req: Request) {
     const contact = value?.contacts?.[0];
 
     console.log(
-      "WHATSAPP_WEBHOOK_EVENT_SUMMARY",
-      JSON.stringify({
-        object: body?.object || null,
-        entryCount: Array.isArray(body?.entry)
-          ? body.entry.length
-          : 0,
-        field:
-          body?.entry?.[0]?.changes?.[0]?.field || null,
-        hasMessages: Boolean(value?.messages?.length),
-        hasStatuses: statuses.length > 0,
-        statusCount: statuses.length,
-      })
-    );
+  "WHATSAPP_WEBHOOK_EVENT_SUMMARY",
+  JSON.stringify({
+    object: body?.object || null,
+    entryCount: Array.isArray(body?.entry)
+      ? body.entry.length
+      : 0,
+    field:
+      body?.entry?.[0]?.changes?.[0]?.field || null,
+    hasMessages: Boolean(value?.messages?.length),
+    hasStatuses: statuses.length > 0,
+    statusCount: statuses.length,
+    phoneNumberId:
+      value?.metadata?.phone_number_id || null,
+  })
+);
 
     if (statuses.length > 0) {
       const statusResults = await processStatusEvents(statuses);
