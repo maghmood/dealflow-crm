@@ -113,6 +113,57 @@ type AffordabilityAssessment = {
   created_at: string;
 };
 
+type WhatsAppConversationReport = {
+  id: number;
+  company_id: number;
+  lead_id: number | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  last_inbound_at: string | null;
+  last_outbound_at: string | null;
+  unread_count: number;
+  waiting_for_response: boolean;
+  status: "Open" | "Closed" | "Archived";
+  is_unmatched: boolean;
+  created_at: string;
+};
+
+type WhatsAppMessageReport = {
+  id: number;
+  company_id: number;
+  lead_id: number | null;
+  conversation_id: number | null;
+  direction: "Inbound" | "Outbound";
+  sender_name: string | null;
+  message: string;
+  delivery_status:
+    | "Pending"
+    | "Sent"
+    | "Delivered"
+    | "Read"
+    | "Failed"
+    | "Received"
+    | null;
+  created_at: string;
+};
+
+type WhatsAppResponseCycle = {
+  inbound_message_id: number;
+  company_id: number;
+  lead_id: number | null;
+  conversation_id: number;
+  inbound_message: string | null;
+  inbound_at: string;
+  response_message_id: number | null;
+  responder_name: string | null;
+  responded_at: string | null;
+  response_minutes: number | null;
+};
+
 type StatusBucket = {
   label: string;
   count: number;
@@ -132,6 +183,10 @@ type SalespersonSummary = {
   callbacksRequired: number;
     affordabilityAssessments: number;
   matchedAssessments: number;
+  whatsappConversations: number;
+whatsappWaiting: number;
+whatsappUnread: number;
+whatsappOutboundMessages: number;
 };
 
 type TrendMonth = {
@@ -167,6 +222,23 @@ function formatDate(value: string | null | undefined) {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatMinutes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0 min";
+  }
+
+  if (value < 60) {
+    return `${Math.round(value)} min`;
+  }
+
+  const hours = Math.floor(value / 60);
+  const minutes = Math.round(value % 60);
+
+  return minutes > 0
+    ? `${hours} hr ${minutes} min`
+    : `${hours} hr`;
 }
 
 function calculateNetDealValue(deal: Deal) {
@@ -327,6 +399,17 @@ const [callLogs, setCallLogs] = useState<CallLog[]>([]);
 const [affordabilityAssessments, setAffordabilityAssessments] = useState<
   AffordabilityAssessment[]
 >([]);
+const [whatsappConversations, setWhatsappConversations] = useState<
+  WhatsAppConversationReport[]
+>([]);
+
+const [whatsappMessages, setWhatsappMessages] = useState<
+  WhatsAppMessageReport[]
+>([]);
+
+const [whatsappResponseCycles, setWhatsappResponseCycles] = useState<
+  WhatsAppResponseCycle[]
+>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState("All Time");
 
@@ -348,6 +431,9 @@ function exportFullReportPdf() {
   documentsResult,
   callLogsResult,
   affordabilityResult,
+  whatsappConversationsResult,
+  whatsappMessagesResult,
+  whatsappResponseCyclesResult,
 ] = await Promise.all([
       supabase
         .from("leads")
@@ -410,6 +496,30 @@ supabase
   )
   .eq("company_id", profile.company_id)
   .order("created_at", { ascending: false }),
+
+supabase
+  .from("whatsapp_conversations")
+  .select(
+    "id, company_id, lead_id, customer_name, customer_phone, assigned_user_id, assigned_user_name, last_message, last_message_at, last_inbound_at, last_outbound_at, unread_count, waiting_for_response, status, is_unmatched, created_at"
+  )
+  .eq("company_id", profile.company_id)
+  .order("last_message_at", { ascending: false }),
+
+supabase
+  .from("whatsapp_messages")
+  .select(
+    "id, company_id, lead_id, conversation_id, direction, sender_name, message, delivery_status, created_at"
+  )
+  .eq("company_id", profile.company_id)
+  .order("created_at", { ascending: false }),
+
+supabase
+  .from("whatsapp_response_cycles")
+  .select(
+    "inbound_message_id, company_id, lead_id, conversation_id, inbound_message, inbound_at, response_message_id, responder_name, responded_at, response_minutes"
+  )
+  .eq("company_id", profile.company_id)
+  .order("inbound_at", { ascending: false }),
 
     ]);
 
@@ -496,6 +606,48 @@ if (affordabilityResult.error) {
   );
 }
 
+if (whatsappConversationsResult.error) {
+  console.error(
+    "Error loading WhatsApp conversations report:",
+    whatsappConversationsResult.error.message
+  );
+  setWhatsappConversations([]);
+} else {
+  setWhatsappConversations(
+    Array.isArray(whatsappConversationsResult.data)
+      ? (whatsappConversationsResult.data as WhatsAppConversationReport[])
+      : []
+  );
+}
+
+if (whatsappMessagesResult.error) {
+  console.error(
+    "Error loading WhatsApp messages report:",
+    whatsappMessagesResult.error.message
+  );
+  setWhatsappMessages([]);
+} else {
+  setWhatsappMessages(
+    Array.isArray(whatsappMessagesResult.data)
+      ? (whatsappMessagesResult.data as WhatsAppMessageReport[])
+      : []
+  );
+}
+
+if (whatsappResponseCyclesResult.error) {
+  console.error(
+    "Error loading WhatsApp response cycles:",
+    whatsappResponseCyclesResult.error.message
+  );
+  setWhatsappResponseCycles([]);
+} else {
+  setWhatsappResponseCycles(
+    Array.isArray(whatsappResponseCyclesResult.data)
+      ? (whatsappResponseCyclesResult.data as WhatsAppResponseCycle[])
+      : []
+  );
+}
+
     setLoading(false);
   }
 
@@ -551,7 +703,31 @@ const filteredAffordabilityAssessments = useMemo(
     ),
   [affordabilityAssessments, dateFilter]
 );
-  
+ 
+const filteredWhatsappConversations = useMemo(
+  () =>
+    whatsappConversations.filter((item) =>
+      isDateInFilter(item.last_message_at, dateFilter)
+    ),
+  [whatsappConversations, dateFilter]
+);
+
+const filteredWhatsappMessages = useMemo(
+  () =>
+    whatsappMessages.filter((item) =>
+      isDateInFilter(item.created_at, dateFilter)
+    ),
+  [whatsappMessages, dateFilter]
+);
+
+const filteredWhatsappResponseCycles = useMemo(
+  () =>
+    whatsappResponseCycles.filter((item) =>
+      isDateInFilter(item.inbound_at, dateFilter)
+    ),
+  [whatsappResponseCycles, dateFilter]
+);
+
   const now = new Date();
 
   const totalLeads = filteredLeads.length;
@@ -719,6 +895,115 @@ const averageBalloonPercentage =
       ) / totalAffordabilityAssessments
     : 0;
 
+const totalWhatsappConversations =
+  filteredWhatsappConversations.length;
+
+const openWhatsappConversations =
+  filteredWhatsappConversations.filter(
+    (item) => item.status === "Open"
+  ).length;
+
+const unreadWhatsappConversations =
+  filteredWhatsappConversations.filter(
+    (item) => Number(item.unread_count) > 0
+  ).length;
+
+const waitingWhatsappConversations =
+  filteredWhatsappConversations.filter(
+    (item) => item.waiting_for_response
+  ).length;
+
+const unmatchedWhatsappConversations =
+  filteredWhatsappConversations.filter(
+    (item) => item.is_unmatched
+  ).length;
+
+const inboundWhatsappMessages =
+  filteredWhatsappMessages.filter(
+    (item) => item.direction === "Inbound"
+  ).length;
+
+const outboundWhatsappMessages =
+  filteredWhatsappMessages.filter(
+    (item) => item.direction === "Outbound"
+  ).length;
+
+const deliveredWhatsappMessages =
+  filteredWhatsappMessages.filter(
+    (item) =>
+      item.direction === "Outbound" &&
+      ["Delivered", "Read"].includes(
+        item.delivery_status || ""
+      )
+  ).length;
+
+const readWhatsappMessages =
+  filteredWhatsappMessages.filter(
+    (item) =>
+      item.direction === "Outbound" &&
+      item.delivery_status === "Read"
+  ).length;
+
+const failedWhatsappMessages =
+  filteredWhatsappMessages.filter(
+    (item) =>
+      item.direction === "Outbound" &&
+      item.delivery_status === "Failed"
+  ).length;
+
+const whatsappDeliveryRate = percentage(
+  deliveredWhatsappMessages,
+  outboundWhatsappMessages
+);
+
+const whatsappReadRate = percentage(
+  readWhatsappMessages,
+  outboundWhatsappMessages
+);
+
+const respondedWhatsappCycles =
+  filteredWhatsappResponseCycles.filter(
+    (item) =>
+      item.responded_at !== null &&
+      item.response_minutes !== null &&
+      Number(item.response_minutes) >= 0
+  );
+
+const unansweredWhatsappCycles =
+  filteredWhatsappResponseCycles.filter(
+    (item) => item.responded_at === null
+  );
+
+const averageWhatsappResponseMinutes =
+  respondedWhatsappCycles.length > 0
+    ? respondedWhatsappCycles.reduce(
+        (sum, item) =>
+          sum + Number(item.response_minutes || 0),
+        0
+      ) / respondedWhatsappCycles.length
+    : 0;
+
+const sortedWhatsappResponseMinutes =
+  respondedWhatsappCycles
+    .map((item) => Number(item.response_minutes || 0))
+    .sort((a, b) => a - b);
+
+const medianWhatsappResponseMinutes =
+  sortedWhatsappResponseMinutes.length === 0
+    ? 0
+    : sortedWhatsappResponseMinutes.length % 2 === 1
+    ? sortedWhatsappResponseMinutes[
+        Math.floor(sortedWhatsappResponseMinutes.length / 2)
+      ]
+    : (
+        sortedWhatsappResponseMinutes[
+          sortedWhatsappResponseMinutes.length / 2 - 1
+        ] +
+        sortedWhatsappResponseMinutes[
+          sortedWhatsappResponseMinutes.length / 2
+        ]
+      ) / 2;
+
   const conversionLeadToDeal = percentage(totalDeals, totalLeads);
   const conversionDealToFinance = percentage(financeApprovedDeals, totalDeals);
   const conversionFinanceToDelivered = percentage(
@@ -782,6 +1067,8 @@ const averageBalloonPercentage =
         lead.assigned_user_id || lead.assigned_user_name || "Unassigned"
       );
 
+
+
       if (!map.has(key)) {
         map.set(key, {
           name: lead.assigned_user_name || "Unassigned",
@@ -793,10 +1080,14 @@ const averageBalloonPercentage =
           deliveredDeals: 0,
           dealValue: 0,
           calls: 0,
-answeredCalls: 0,
-callbacksRequired: 0,
-affordabilityAssessments: 0,
-matchedAssessments: 0,
+          answeredCalls: 0,
+          callbacksRequired: 0,
+          affordabilityAssessments: 0,
+          matchedAssessments: 0,
+          whatsappConversations: 0,
+          whatsappWaiting: 0,
+          whatsappUnread: 0,
+          whatsappOutboundMessages: 0,
         });
       }
 
@@ -833,10 +1124,14 @@ matchedAssessments: 0,
           deliveredDeals: 0,
           dealValue: 0,
           calls: 0,
-answeredCalls: 0,
-callbacksRequired: 0,
-affordabilityAssessments: 0,
-matchedAssessments: 0,
+          answeredCalls: 0,
+          callbacksRequired: 0,
+          affordabilityAssessments: 0,
+          matchedAssessments: 0,
+          whatsappConversations: 0,
+          whatsappWaiting: 0,
+          whatsappUnread: 0,
+          whatsappOutboundMessages: 0,
         });
       }
 
@@ -847,6 +1142,9 @@ matchedAssessments: 0,
       if (deal.deal_stage === "Delivered") {
         summary.deliveredDeals += 1;
       }
+
+
+
     });
 
 filteredCallLogs.forEach((call) => {
@@ -868,7 +1166,11 @@ filteredCallLogs.forEach((call) => {
       answeredCalls: 0,
       callbacksRequired: 0,
       affordabilityAssessments: 0,
-matchedAssessments: 0,
+      matchedAssessments: 0,
+      whatsappConversations: 0,
+      whatsappWaiting: 0,
+      whatsappUnread: 0,
+      whatsappOutboundMessages: 0,
     });
   }
 
@@ -908,6 +1210,10 @@ filteredAffordabilityAssessments.forEach((assessment) => {
       callbacksRequired: 0,
       affordabilityAssessments: 0,
       matchedAssessments: 0,
+      whatsappConversations: 0,
+whatsappWaiting: 0,
+whatsappUnread: 0,
+whatsappOutboundMessages: 0,
     });
   }
 
@@ -920,12 +1226,99 @@ filteredAffordabilityAssessments.forEach((assessment) => {
   }
 });
 
+filteredWhatsappConversations.forEach((conversation) => {
+  const key = String(
+    conversation.assigned_user_id ||
+      conversation.assigned_user_name ||
+      "Unassigned"
+  );
+
+  if (!map.has(key)) {
+    map.set(key, {
+      name: conversation.assigned_user_name || "Unassigned",
+      userId: conversation.assigned_user_id,
+      leads: 0,
+      openLeads: 0,
+      deliveredLeads: 0,
+      deals: 0,
+      deliveredDeals: 0,
+      dealValue: 0,
+      calls: 0,
+      answeredCalls: 0,
+      callbacksRequired: 0,
+      affordabilityAssessments: 0,
+      matchedAssessments: 0,
+      whatsappConversations: 0,
+      whatsappWaiting: 0,
+      whatsappUnread: 0,
+      whatsappOutboundMessages: 0,
+    });
+  }
+
+  const summary = map.get(key)!;
+
+  summary.whatsappConversations += 1;
+
+  if (conversation.waiting_for_response) {
+    summary.whatsappWaiting += 1;
+  }
+
+  if (Number(conversation.unread_count) > 0) {
+    summary.whatsappUnread += 1;
+  }
+});
+
+filteredWhatsappMessages
+  .filter((message) => message.direction === "Outbound")
+  .forEach((message) => {
+    const matchingConversation =
+      filteredWhatsappConversations.find(
+        (conversation) =>
+          conversation.id === message.conversation_id
+      );
+
+    const key = String(
+      matchingConversation?.assigned_user_id ||
+        matchingConversation?.assigned_user_name ||
+        "Unassigned"
+    );
+
+    if (!map.has(key)) {
+      map.set(key, {
+        name:
+          matchingConversation?.assigned_user_name ||
+          "Unassigned",
+        userId:
+          matchingConversation?.assigned_user_id || null,
+        leads: 0,
+        openLeads: 0,
+        deliveredLeads: 0,
+        deals: 0,
+        deliveredDeals: 0,
+        dealValue: 0,
+        calls: 0,
+        answeredCalls: 0,
+        callbacksRequired: 0,
+        affordabilityAssessments: 0,
+        matchedAssessments: 0,
+        whatsappConversations: 0,
+        whatsappWaiting: 0,
+        whatsappUnread: 0,
+        whatsappOutboundMessages: 0,
+      });
+    }
+
+    map.get(key)!.whatsappOutboundMessages += 1;
+  });
+
     return Array.from(map.values()).sort((a, b) => b.dealValue - a.dealValue);
   }, [
   filteredLeads,
   filteredDeals,
   filteredCallLogs,
   filteredAffordabilityAssessments,
+  filteredWhatsappConversations,
+  filteredWhatsappMessages,
 ]);
 
 function exportLeadsCsv() {
@@ -1005,6 +1398,42 @@ function exportCallsCsv() {
   );
 }
 
+function exportWhatsappCsv() {
+  downloadCsv(
+    `dealflow-whatsapp-report-${exportDateStamp()}.csv`,
+    filteredWhatsappConversations.map((conversation) => ({
+      "Conversation ID": conversation.id,
+      "Lead ID": conversation.lead_id || "",
+      Customer: conversation.customer_name || "",
+      "Phone Number": conversation.customer_phone || "",
+      "Assigned User":
+        conversation.assigned_user_name || "Unassigned",
+      Status: conversation.status,
+      "Unread Count": conversation.unread_count,
+      "Waiting for Response":
+        conversation.waiting_for_response ? "Yes" : "No",
+      "Unmatched Contact":
+        conversation.is_unmatched ? "Yes" : "No",
+      "Last Message": conversation.last_message || "",
+      "Last Message Date": conversation.last_message_at
+        ? new Date(
+            conversation.last_message_at
+          ).toLocaleString("en-ZA")
+        : "",
+      "Last Inbound Date": conversation.last_inbound_at
+        ? new Date(
+            conversation.last_inbound_at
+          ).toLocaleString("en-ZA")
+        : "",
+      "Last Outbound Date": conversation.last_outbound_at
+        ? new Date(
+            conversation.last_outbound_at
+          ).toLocaleString("en-ZA")
+        : "",
+    }))
+  );
+}
+
 function exportSalespersonCsv() {
   downloadCsv(
     `dealflow-salesperson-performance-${exportDateStamp()}.csv`,
@@ -1026,6 +1455,17 @@ Calls: person.calls,
   person.matchedAssessments,
   person.affordabilityAssessments
 ),
+"WhatsApp Conversations":
+  person.whatsappConversations,
+
+"WhatsApp Outbound Messages":
+  person.whatsappOutboundMessages,
+
+"WhatsApp Waiting":
+  person.whatsappWaiting,
+
+"WhatsApp Unread":
+  person.whatsappUnread,
 "Lead to Deal %": percentage(person.deals, person.leads),
       "Deal to Delivered %": percentage(person.deliveredDeals, person.deals),
     }))
@@ -1125,7 +1565,7 @@ function exportAffordabilityCsv() {
       </p>
     </div>
 
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-7">
       <button
         onClick={exportLeadsCsv}
         className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
@@ -1167,6 +1607,12 @@ function exportAffordabilityCsv() {
       >
         Export Salespeople
       </button>
+      <button
+  onClick={exportWhatsappCsv}
+  className="rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-100"
+>
+  Export WhatsApp
+</button>
     </div>
   </div>
 </div>
@@ -1258,6 +1704,30 @@ function exportAffordabilityCsv() {
   label="Average Maximum Price"
   value={formatRand(averageMaximumVehiclePrice)}
   color="orange"
+/>
+
+<MetricCard
+  label="WhatsApp Conversations"
+  value={totalWhatsappConversations}
+  color="green"
+/>
+
+<MetricCard
+  label="Customers Waiting"
+  value={waitingWhatsappConversations}
+  color="orange"
+/>
+
+<MetricCard
+  label="Unread WhatsApp"
+  value={unreadWhatsappConversations}
+  color="red"
+/>
+
+<MetricCard
+  label="Median Response Time"
+  value={formatMinutes(medianWhatsappResponseMinutes)}
+  color="blue"
 />
 
             </div>
@@ -1550,7 +2020,133 @@ function exportAffordabilityCsv() {
     </div>
   </ReportCard>
 </div>
+<div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+  <ReportCard title="WhatsApp Performance">
+    <div className="space-y-3">
+      <SnapshotRow
+        label="Total Conversations"
+        value={totalWhatsappConversations}
+      />
 
+      <SnapshotRow
+        label="Open Conversations"
+        value={openWhatsappConversations}
+      />
+
+      <SnapshotRow
+        label="Inbound Messages"
+        value={inboundWhatsappMessages}
+      />
+
+      <SnapshotRow
+        label="Outbound Messages"
+        value={outboundWhatsappMessages}
+      />
+
+      <SnapshotRow
+        label="Delivery Rate"
+        value={`${whatsappDeliveryRate}%`}
+      />
+
+      <SnapshotRow
+        label="Read Rate"
+        value={`${whatsappReadRate}%`}
+      />
+
+      <SnapshotRow
+        label="Failed Messages"
+        value={failedWhatsappMessages}
+      />
+
+      <SnapshotRow
+        label="Average Response Time"
+        value={formatMinutes(
+          averageWhatsappResponseMinutes
+        )}
+      />
+
+      <SnapshotRow
+        label="Median Response Time"
+        value={formatMinutes(
+          medianWhatsappResponseMinutes
+        )}
+      />
+
+      <SnapshotRow
+        label="Unanswered Response Cycles"
+        value={unansweredWhatsappCycles.length}
+      />
+
+      <SnapshotRow
+        label="Unmatched Contacts"
+        value={unmatchedWhatsappConversations}
+      />
+    </div>
+  </ReportCard>
+
+  <ReportCard title="Customers Awaiting WhatsApp Response">
+    <div className="space-y-3">
+      {filteredWhatsappConversations.filter(
+        (conversation) =>
+          conversation.waiting_for_response &&
+          conversation.status === "Open"
+      ).length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+          <p className="text-sm font-semibold text-slate-700">
+            No customers are currently waiting.
+          </p>
+        </div>
+      ) : (
+        filteredWhatsappConversations
+          .filter(
+            (conversation) =>
+              conversation.waiting_for_response &&
+              conversation.status === "Open"
+          )
+          .slice(0, 8)
+          .map((conversation) => (
+            <div
+              key={conversation.id}
+              className="rounded-xl border border-orange-200 bg-orange-50 p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-bold text-slate-900">
+                    {conversation.customer_name ||
+                      "WhatsApp Customer"}
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-600">
+                    {conversation.last_message ||
+                      "No message preview"}
+                  </p>
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    Assigned to{" "}
+                    {conversation.assigned_user_name ||
+                      "Unassigned"}
+                  </p>
+                </div>
+
+                {conversation.unread_count > 0 && (
+                  <span className="rounded-full bg-red-600 px-2 py-1 text-xs font-bold text-white">
+                    {conversation.unread_count} unread
+                  </span>
+                )}
+              </div>
+
+              <Link
+                href={`/whatsapp?conversation=${conversation.id}`}
+                className="mt-3 inline-flex rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500"
+              >
+                Open Conversation
+              </Link>
+            </div>
+          ))
+      )}
+    </div>
+  </ReportCard>
+</div>
 </div>
             <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
               <div className="print-section print-page rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -1566,7 +2162,7 @@ function exportAffordabilityCsv() {
                 </div>
 
                 <div className="mt-5 overflow-x-auto">
-                  <table className="min-w-[1450px]">
+                  <table className="min-w-[1850px]">
                     <thead className="bg-slate-50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
@@ -1607,10 +2203,26 @@ function exportAffordabilityCsv() {
 <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
   Match Rate
 </th>
+<th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+  WA Conversations
+</th>
+
+<th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+  WA Messages
+</th>
+
+<th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+  WA Waiting
+</th>
+
+<th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
+  WA Unread
+</th>
 
                         <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
                           Deal Value
                         </th>
+
                       </tr>
                     </thead>
 
@@ -1637,7 +2249,8 @@ function exportAffordabilityCsv() {
                           <td className="px-4 py-4 text-slate-700">
                             {person.deliveredDeals}
                           </td>
-                          <td className="px-4 py-4 text-slate-700">
+                         
+<td className="px-4 py-4 text-slate-700">
   {person.calls}
 </td>
 
@@ -1648,16 +2261,36 @@ function exportAffordabilityCsv() {
 <td className="px-4 py-4 text-slate-700">
   {percentage(person.answeredCalls, person.calls)}%
 </td>
-                          <td className="px-4 py-4 text-slate-700">
-  {person.calls}
+
+<td className="px-4 py-4 text-slate-700">
+  {person.affordabilityAssessments}
 </td>
 
 <td className="px-4 py-4 text-slate-700">
-  {person.answeredCalls}
+  {person.matchedAssessments}
 </td>
 
 <td className="px-4 py-4 text-slate-700">
-  {percentage(person.answeredCalls, person.calls)}%
+  {percentage(
+    person.matchedAssessments,
+    person.affordabilityAssessments
+  )}
+  %
+</td>
+<td className="px-4 py-4 text-slate-700">
+  {person.whatsappConversations}
+</td>
+
+<td className="px-4 py-4 text-slate-700">
+  {person.whatsappOutboundMessages}
+</td>
+
+<td className="px-4 py-4 text-slate-700">
+  {person.whatsappWaiting}
+</td>
+
+<td className="px-4 py-4 text-slate-700">
+  {person.whatsappUnread}
 </td>
                           <td className="px-4 py-4 font-bold text-slate-900">
                             {formatRand(person.dealValue)}
@@ -1668,7 +2301,7 @@ function exportAffordabilityCsv() {
                       {salespersonSummaries.length === 0 && (
                         <tr>
                           <td
-                            colSpan={9}
+                            colSpan={16}
                             className="px-4 py-8 text-center text-slate-500"
                           >
                             No salesperson data found.
@@ -1689,12 +2322,7 @@ function exportAffordabilityCsv() {
                       label="Available Vehicles"
                       value={availableVehicles}
                     />
-                    <SnapshotRow label="Total Calls" value={totalCalls} />
-<SnapshotRow label="Answered Rate" value={`${answeredRate}%`} />
-<SnapshotRow
-  label="Callbacks Required"
-  value={callbacksRequired}
-/>
+                   
                     <SnapshotRow
                       label="Reserved Vehicles"
                       value={reservedVehicles}
@@ -1713,6 +2341,22 @@ function exportAffordabilityCsv() {
 <SnapshotRow
   label="Callbacks Required"
   value={callbacksRequired}
+/>
+<SnapshotRow
+  label="WhatsApp Customers Waiting"
+  value={waitingWhatsappConversations}
+/>
+
+<SnapshotRow
+  label="Unread WhatsApp"
+  value={unreadWhatsappConversations}
+/>
+
+<SnapshotRow
+  label="Median WhatsApp Response"
+  value={formatMinutes(
+    medianWhatsappResponseMinutes
+  )}
 />
                   </div>
                 </ReportCard>
@@ -1786,28 +2430,10 @@ function exportAffordabilityCsv() {
 
                 <div className="mt-5 space-y-4 text-sm leading-6 text-slate-600">
                   <p>
-                    This reporting page reads directly from your existing CRM
-                    tables. It does not create or change any data.
-                  </p>
-
-                  <p>
-                    The date filter applies to the created/submitted date for
-                    leads, deals, inventory, finance applications and documents.
-                    Task counts are shown as current operational totals.
-                  </p>
-
-                  <p>
-                    The conversion funnel compares total leads, deals created,
-                    finance-approved deals and delivered deals in the selected
-                    period. The 6-month trend always shows recent monthly
-                    activity from live CRM data.
-                  </p>
-
-                  <p>
-  The date filter applies to the created/submitted date for leads,
-  deals, inventory, finance applications, documents, calls and
-  affordability assessments. Task counts are shown as current
-  operational totals.
+  The date filter applies to leads, deals, inventory, finance
+  applications, documents, calls, affordability assessments,
+  WhatsApp conversations, messages and response cycles. Task
+  counts remain current operational totals.
 </p>
                 </div>
               </div>
