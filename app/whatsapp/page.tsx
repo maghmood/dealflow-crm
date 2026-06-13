@@ -75,6 +75,15 @@ type InboxUser = {
   status: string | null;
 };
 
+type LeadOption = {
+  id: number;
+  customer: string;
+  phone: string | null;
+  status: string | null;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
+};
+
 const STATUS_FILTERS = [
   "Open",
   "Closed",
@@ -154,6 +163,21 @@ const requestedConversationId = Number(
   const [sendingMessage, setSendingMessage] = useState(false);
 const [inboxUsers, setInboxUsers] = useState<InboxUser[]>([]);
 const [updatingConversation, setUpdatingConversation] = useState(false);
+const [leadOptions, setLeadOptions] = useState<LeadOption[]>([]);
+const [loadingLeadOptions, setLoadingLeadOptions] = useState(false);
+
+const [showLinkLeadModal, setShowLinkLeadModal] = useState(false);
+const [showCreateLeadModal, setShowCreateLeadModal] = useState(false);
+
+const [leadSearchText, setLeadSearchText] = useState("");
+const [selectedLeadId, setSelectedLeadId] = useState("");
+
+const [newLeadName, setNewLeadName] = useState("");
+const [newLeadAssignedUserId, setNewLeadAssignedUserId] =
+  useState("");
+
+const [resolvingUnmatchedContact, setResolvingUnmatchedContact] =
+  useState(false);
 const [realtimeStatus, setRealtimeStatus] = useState<
   "Connecting" | "Live" | "Disconnected" | "Error"
 >("Connecting");
@@ -192,6 +216,35 @@ async function fetchInboxUsers() {
   }
 
   setInboxUsers(Array.isArray(data) ? data : []);
+}
+
+async function fetchLeadOptions() {
+  if (!profile?.company_id) return;
+
+  setLoadingLeadOptions(true);
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select(
+      "id, customer, phone, status, assigned_user_id, assigned_user_name"
+    )
+    .eq("company_id", profile.company_id)
+    .order("customer", { ascending: true })
+    .limit(500);
+
+  if (error) {
+    console.error(
+      "Error loading leads for WhatsApp linking:",
+      error.message
+    );
+    setLeadOptions([]);
+  } else {
+    setLeadOptions(
+      Array.isArray(data) ? (data as LeadOption[]) : []
+    );
+  }
+
+  setLoadingLeadOptions(false);
 }
 
   async function fetchConversations(
@@ -418,6 +471,95 @@ async function changeConversationStatus(
     await fetchConversations(selectedConversation.id);
   } finally {
     setUpdatingConversation(false);
+  }
+}
+
+async function linkExistingLead() {
+  if (
+    !selectedConversation ||
+    !profile?.company_id ||
+    !selectedLeadId
+  ) {
+    alert("Please select a lead.");
+    return;
+  }
+
+  setResolvingUnmatchedContact(true);
+
+  try {
+    const { data, error } = await supabase.rpc(
+      "link_whatsapp_conversation_to_lead",
+      {
+        p_conversation_id: selectedConversation.id,
+        p_lead_id: Number(selectedLeadId),
+      }
+    );
+
+    if (error) {
+      alert("Error linking lead: " + error.message);
+      return;
+    }
+
+    const targetConversationId = Number(data);
+
+    setShowLinkLeadModal(false);
+    setSelectedLeadId("");
+    setLeadSearchText("");
+
+    await fetchConversations(targetConversationId);
+    await fetchMessages(targetConversationId);
+
+    alert("WhatsApp conversation linked successfully.");
+  } finally {
+    setResolvingUnmatchedContact(false);
+  }
+}
+
+async function createLeadFromConversation() {
+  if (!selectedConversation || !profile?.company_id) return;
+
+  const customerName = newLeadName.trim();
+
+  if (!customerName) {
+    alert("Please enter the customer name.");
+    return;
+  }
+
+  setResolvingUnmatchedContact(true);
+
+  try {
+    const { data, error } = await supabase.rpc(
+      "create_lead_from_whatsapp_conversation",
+      {
+        p_conversation_id: selectedConversation.id,
+        p_customer_name: customerName,
+        p_assigned_user_id: newLeadAssignedUserId
+          ? Number(newLeadAssignedUserId)
+          : null,
+      }
+    );
+
+    if (error) {
+      alert("Error creating lead: " + error.message);
+      return;
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    const targetConversationId = Number(
+      result?.conversation_id
+    );
+
+    setShowCreateLeadModal(false);
+    setNewLeadName("");
+    setNewLeadAssignedUserId("");
+
+    await fetchConversations(targetConversationId);
+    await fetchMessages(targetConversationId);
+
+    alert("Lead created and WhatsApp conversation linked.");
+  } finally {
+    setResolvingUnmatchedContact(false);
   }
 }
 
@@ -723,6 +865,25 @@ useEffect(() => {
   profile?.company_id,
   selectedConversationId,
 ]);
+
+const filteredLeadOptions = useMemo(() => {
+  const search = leadSearchText.trim().toLowerCase();
+
+  if (!search) return leadOptions;
+
+  return leadOptions.filter((lead) =>
+    [
+      lead.customer,
+      lead.phone,
+      lead.status,
+      lead.assigned_user_name,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(search)
+  );
+}, [leadOptions, leadSearchText]);
 
   const filteredConversations = useMemo(() => {
     const search = searchText.trim().toLowerCase();
@@ -1040,6 +1201,46 @@ useEffect(() => {
       This number is not linked to a CRM lead. Link it to an
       existing lead or create a new lead before replying.
     </p>
+    <WriteAccessGuard>
+  {(profile?.role === "Admin" ||
+    profile?.role === "Manager" ||
+    profile?.role === "Finance") && (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={async () => {
+          await fetchLeadOptions();
+          setShowLinkLeadModal(true);
+        }}
+        className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-500"
+      >
+        Link Existing Lead
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setNewLeadName(
+            selectedConversation.customer_name ||
+              selectedConversation.external_contact_name ||
+              ""
+          );
+
+          setNewLeadAssignedUserId(
+            selectedConversation.assigned_user_id
+              ? String(selectedConversation.assigned_user_id)
+              : ""
+          );
+
+          setShowCreateLeadModal(true);
+        }}
+        className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500"
+      >
+        Create New Lead
+      </button>
+    </div>
+  )}
+</WriteAccessGuard>
   </div>
 )}
 
@@ -1295,6 +1496,219 @@ profile?.role === "Finance" ? (
             </div>
           </div>
         </div>
+        {showLinkLeadModal && selectedConversation && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">
+            Link Existing Lead
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Link {selectedConversation.customer_phone} to an existing
+            CRM lead.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowLinkLeadModal(false)}
+          className="text-xl text-slate-400 hover:text-slate-700"
+        >
+          ×
+        </button>
+      </div>
+
+      <input
+        type="search"
+        value={leadSearchText}
+        onChange={(event) =>
+          setLeadSearchText(event.target.value)
+        }
+        placeholder="Search by customer, phone or salesperson..."
+        className="mt-5 w-full rounded-xl border border-slate-300 p-3"
+      />
+
+      <div className="mt-4 max-h-80 space-y-2 overflow-y-auto">
+        {loadingLeadOptions ? (
+          <p className="text-sm text-slate-500">
+            Loading leads...
+          </p>
+        ) : filteredLeadOptions.length === 0 ? (
+          <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+            No matching leads found.
+          </p>
+        ) : (
+          filteredLeadOptions.map((lead) => (
+            <label
+              key={lead.id}
+              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${
+                selectedLeadId === String(lead.id)
+                  ? "border-blue-500 bg-blue-50"
+                  : "border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <input
+                type="radio"
+                name="whatsapp-lead"
+                value={lead.id}
+                checked={selectedLeadId === String(lead.id)}
+                onChange={() =>
+                  setSelectedLeadId(String(lead.id))
+                }
+                className="mt-1"
+              />
+
+              <div>
+                <p className="font-semibold text-slate-900">
+                  {lead.customer}
+                </p>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {lead.phone || "No phone"} •{" "}
+                  {lead.status || "No status"}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Assigned to{" "}
+                  {lead.assigned_user_name || "Unassigned"}
+                </p>
+              </div>
+            </label>
+          ))
+        )}
+      </div>
+
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => setShowLinkLeadModal(false)}
+          className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={linkExistingLead}
+          disabled={
+            resolvingUnmatchedContact || !selectedLeadId
+          }
+          className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {resolvingUnmatchedContact
+            ? "Linking..."
+            : "Link Lead"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showCreateLeadModal && selectedConversation && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">
+            Create Lead from WhatsApp
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            The WhatsApp message history will be linked to the new
+            lead.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowCreateLeadModal(false)}
+          className="text-xl text-slate-400 hover:text-slate-700"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="mt-5 space-y-4">
+        <div>
+          <label className="text-sm font-semibold text-slate-700">
+            Customer Name
+          </label>
+
+          <input
+            type="text"
+            value={newLeadName}
+            onChange={(event) =>
+              setNewLeadName(event.target.value)
+            }
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-slate-700">
+            WhatsApp Number
+          </label>
+
+          <input
+            type="text"
+            value={selectedConversation.customer_phone || ""}
+            disabled
+            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-100 p-3 text-slate-500"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-slate-700">
+            Assign To
+          </label>
+
+          <select
+            value={newLeadAssignedUserId}
+            onChange={(event) =>
+              setNewLeadAssignedUserId(event.target.value)
+            }
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          >
+            <option value="">Unassigned</option>
+
+            {inboxUsers.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.full_name || user.email} ({user.role})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => setShowCreateLeadModal(false)}
+          className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={createLeadFromConversation}
+          disabled={
+            resolvingUnmatchedContact ||
+            !newLeadName.trim()
+          }
+          className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {resolvingUnmatchedContact
+            ? "Creating..."
+            : "Create Lead"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
       </PageAccessGuard>
     </DashboardLayout>
   );
