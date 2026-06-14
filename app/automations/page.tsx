@@ -29,11 +29,42 @@ type AutomationRun = {
 type ManualRunResult = {
   run_id?: number;
   final_status?: string;
+
+  stale_enabled?: boolean;
   stale_candidates?: number;
   stale_processed?: number;
+
+  whatsapp_enabled?: boolean;
   whatsapp_candidates?: number;
   whatsapp_processed?: number;
+
   error_message?: string | null;
+};
+
+type AutomationSettings = {
+  id: number;
+  company_id: number;
+
+  stale_lead_enabled: boolean;
+  stale_lead_days: number;
+
+  whatsapp_sla_enabled: boolean;
+  whatsapp_sla_minutes: number;
+
+  business_hours_enabled: boolean;
+  business_day_start: string;
+  business_day_end: string;
+
+  include_saturday: boolean;
+  include_sunday: boolean;
+
+  timezone_name: string;
+
+  updated_by_id: number | null;
+  updated_by_name: string | null;
+
+  created_at: string;
+  updated_at: string;
 };
 
 function formatDateTime(value: string | null) {
@@ -106,7 +137,38 @@ export default function AutomationsPage() {
   const [runs, setRuns] = useState<AutomationRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningNow, setRunningNow] = useState(false);
+const [automationSettings, setAutomationSettings] =
+  useState<AutomationSettings | null>(null);
 
+const [loadingSettings, setLoadingSettings] =
+  useState(true);
+
+const [savingSettings, setSavingSettings] =
+  useState(false);
+
+const [staleLeadEnabled, setStaleLeadEnabled] =
+  useState(true);
+
+const [whatsappSlaEnabled, setWhatsappSlaEnabled] =
+  useState(true);
+
+const [businessHoursEnabled, setBusinessHoursEnabled] =
+  useState(false);
+
+const [businessDayStart, setBusinessDayStart] =
+  useState("08:00");
+
+const [businessDayEnd, setBusinessDayEnd] =
+  useState("17:00");
+
+const [includeSaturday, setIncludeSaturday] =
+  useState(false);
+
+const [includeSunday, setIncludeSunday] =
+  useState(false);
+
+const [timezoneName, setTimezoneName] =
+  useState("Africa/Johannesburg");
   const [staleDays, setStaleDays] = useState("7");
   const [whatsappSlaMinutes, setWhatsappSlaMinutes] =
     useState("30");
@@ -116,6 +178,74 @@ export default function AutomationsPage() {
 
   const [lastManualResult, setLastManualResult] =
     useState<ManualRunResult | null>(null);
+
+  async function fetchAutomationSettings() {
+  if (!profile?.company_id) return;
+
+  setLoadingSettings(true);
+
+  const { data, error } = await supabase
+    .from("automation_settings")
+    .select(
+      "id, company_id, stale_lead_enabled, stale_lead_days, whatsapp_sla_enabled, whatsapp_sla_minutes, business_hours_enabled, business_day_start, business_day_end, include_saturday, include_sunday, timezone_name, updated_by_id, updated_by_name, created_at, updated_at"
+    )
+    .eq("company_id", profile.company_id)
+    .maybeSingle();
+
+  if (error) {
+    console.error(
+      "Error loading automation settings:",
+      error.message
+    );
+
+    setAutomationSettings(null);
+    setLoadingSettings(false);
+    return;
+  }
+
+  if (!data) {
+    setAutomationSettings(null);
+    setLoadingSettings(false);
+    return;
+  }
+
+  const settings = data as AutomationSettings;
+
+  setAutomationSettings(settings);
+
+  setStaleLeadEnabled(settings.stale_lead_enabled);
+  setStaleDays(String(settings.stale_lead_days));
+
+  setWhatsappSlaEnabled(
+    settings.whatsapp_sla_enabled
+  );
+
+  setWhatsappSlaMinutes(
+    String(settings.whatsapp_sla_minutes)
+  );
+
+  setBusinessHoursEnabled(
+    settings.business_hours_enabled
+  );
+
+  setBusinessDayStart(
+    settings.business_day_start.slice(0, 5)
+  );
+
+  setBusinessDayEnd(
+    settings.business_day_end.slice(0, 5)
+  );
+
+  setIncludeSaturday(settings.include_saturday);
+  setIncludeSunday(settings.include_sunday);
+
+  setTimezoneName(
+    settings.timezone_name ||
+      "Africa/Johannesburg"
+  );
+
+  setLoadingSettings(false);
+}
 
   async function fetchAutomationRuns() {
     if (!profile?.company_id) return;
@@ -149,10 +279,11 @@ export default function AutomationsPage() {
   }
 
   useEffect(() => {
-    if (!profile?.company_id) return;
+  if (!profile?.company_id) return;
 
-    fetchAutomationRuns();
-  }, [profile?.company_id]);
+  fetchAutomationRuns();
+  fetchAutomationSettings();
+}, [profile?.company_id]);
 
   useEffect(() => {
     if (!profile?.company_id) return;
@@ -197,119 +328,232 @@ export default function AutomationsPage() {
     };
   }, [profile?.company_id]);
 
+  async function saveAutomationSettings() {
+  if (!profile?.company_id || !profile?.id) return;
+
+  const staleDaysNumber = Number(staleDays);
+  const whatsappSlaNumber = Number(
+    whatsappSlaMinutes
+  );
+
+  if (
+    !Number.isInteger(staleDaysNumber) ||
+    staleDaysNumber < 1 ||
+    staleDaysNumber > 365
+  ) {
+    alert(
+      "Stale lead threshold must be between 1 and 365 days."
+    );
+    return;
+  }
+
+  if (
+    !Number.isInteger(whatsappSlaNumber) ||
+    whatsappSlaNumber < 1 ||
+    whatsappSlaNumber > 10080
+  ) {
+    alert(
+      "WhatsApp SLA must be between 1 and 10,080 minutes."
+    );
+    return;
+  }
+
+  if (
+    businessHoursEnabled &&
+    businessDayEnd <= businessDayStart
+  ) {
+    alert(
+      "Business closing time must be later than the opening time."
+    );
+    return;
+  }
+
+  setSavingSettings(true);
+
+  const payload = {
+    company_id: profile.company_id,
+
+    stale_lead_enabled: staleLeadEnabled,
+    stale_lead_days: staleDaysNumber,
+
+    whatsapp_sla_enabled: whatsappSlaEnabled,
+    whatsapp_sla_minutes: whatsappSlaNumber,
+
+    business_hours_enabled: businessHoursEnabled,
+    business_day_start: businessDayStart,
+    business_day_end: businessDayEnd,
+
+    include_saturday: includeSaturday,
+    include_sunday: includeSunday,
+
+    timezone_name: timezoneName,
+
+    updated_by_id: profile.id,
+    updated_by_name:
+      profile.full_name ||
+      profile.email ||
+      "Unknown User",
+  };
+
+  const { data, error } = await supabase
+    .from("automation_settings")
+    .upsert(payload, {
+      onConflict: "company_id",
+    })
+    .select(
+      "id, company_id, stale_lead_enabled, stale_lead_days, whatsapp_sla_enabled, whatsapp_sla_minutes, business_hours_enabled, business_day_start, business_day_end, include_saturday, include_sunday, timezone_name, updated_by_id, updated_by_name, created_at, updated_at"
+    )
+    .single();
+
+  if (error) {
+    alert(
+      "Error saving automation settings: " +
+        error.message
+    );
+
+    setSavingSettings(false);
+    return;
+  }
+
+  setAutomationSettings(
+    data as AutomationSettings
+  );
+
+  setSavingSettings(false);
+
+  alert("Automation settings saved successfully.");
+}
+
   async function runAutomationsNow() {
-    if (!profile?.company_id) return;
-
-    const staleDaysNumber = Number(staleDays);
-    const whatsappSlaNumber = Number(
-      whatsappSlaMinutes
+  if (
+    !profile?.company_id ||
+    !automationSettings
+  ) {
+    alert(
+      "Automation settings have not loaded yet."
     );
+    return;
+  }
+
+  if (
+    !automationSettings.stale_lead_enabled &&
+    !automationSettings.whatsapp_sla_enabled
+  ) {
+    alert(
+      "At least one automation rule must be enabled."
+    );
+    return;
+  }
+
+  const enabledRules = [
+    automationSettings.stale_lead_enabled
+      ? `Stale leads after ${automationSettings.stale_lead_days} days`
+      : null,
+
+    automationSettings.whatsapp_sla_enabled
+      ? `WhatsApp SLA after ${automationSettings.whatsapp_sla_minutes} minutes`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const confirmed = window.confirm(
+    `Run the saved automation settings now?\n\n${enabledRules}`
+  );
+
+  if (!confirmed) return;
+
+  setRunningNow(true);
+  setLastManualResult(null);
+
+  try {
+    const {
+      data: sessionData,
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    const accessToken =
+      sessionData.session?.access_token;
 
     if (
-      !Number.isInteger(staleDaysNumber) ||
-      staleDaysNumber < 1
+      sessionError ||
+      !accessToken
     ) {
       alert(
-        "Stale lead threshold must be at least 1 day."
+        "Your login session has expired. Please sign in again."
       );
       return;
     }
 
-    if (
-      !Number.isInteger(whatsappSlaNumber) ||
-      whatsappSlaNumber < 1
-    ) {
-      alert(
-        "WhatsApp SLA must be at least 1 minute."
-      );
-      return;
-    }
+    const response = await fetch(
+      "/api/automations/run",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json",
 
-    const confirmed = window.confirm(
-      `Run automations now?\n\n` +
-        `Stale lead threshold: ${staleDaysNumber} days\n` +
-        `WhatsApp SLA: ${whatsappSlaNumber} minutes`
+          Authorization:
+            `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          companyId:
+            profile.company_id,
+        }),
+      }
     );
 
-    if (!confirmed) return;
-
-    setRunningNow(true);
-    setLastManualResult(null);
+    let result: {
+      success?: boolean;
+      error?: string | null;
+      result?: ManualRunResult | null;
+    };
 
     try {
-      const {
-        data: sessionData,
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      const accessToken =
-        sessionData.session?.access_token;
-
-      if (sessionError || !accessToken) {
-        alert(
-          "Your login session has expired. Please sign in again."
-        );
-        return;
-      }
-
-      const response = await fetch(
-        "/api/automations/run",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            companyId: profile.company_id,
-            staleDays: staleDaysNumber,
-            whatsappSlaMinutes:
-              whatsappSlaNumber,
-          }),
-        }
-      );
-
-      let result: {
-        success?: boolean;
-        error?: string | null;
-        result?: ManualRunResult | null;
-      };
-
-      try {
-        result = await response.json();
-      } catch {
-        alert(
-          "Automation route returned an invalid response."
-        );
-        return;
-      }
-
-      if (!response.ok || !result.success) {
-        alert(
-          "Automation run failed: " +
-            (result.error || "Unknown error")
-        );
-        return;
-      }
-
-      setLastManualResult(result.result || null);
-
-      await fetchAutomationRuns();
-
-      alert("Automations completed successfully.");
-    } catch (error) {
-      console.error(
-        "Unexpected automation run error:",
-        error
-      );
-
+      result = await response.json();
+    } catch {
       alert(
-        "Unexpected error while running automations."
+        "Automation route returned an invalid response."
       );
-    } finally {
-      setRunningNow(false);
+      return;
     }
+
+    if (
+      !response.ok ||
+      !result.success
+    ) {
+      alert(
+        "Automation run failed: " +
+          (result.error || "Unknown error")
+      );
+      return;
+    }
+
+    setLastManualResult(
+      result.result || null
+    );
+
+    await Promise.all([
+      fetchAutomationRuns(),
+      fetchAutomationSettings(),
+    ]);
+
+    alert(
+      "Automations completed successfully using the saved settings."
+    );
+  } catch (error) {
+    console.error(
+      "Unexpected automation run error:",
+      error
+    );
+
+    alert(
+      "Unexpected error while running automations."
+    );
+  } finally {
+    setRunningNow(false);
   }
+}
 
   const filteredRuns = useMemo(() => {
     return runs.filter((run) => {
@@ -439,6 +683,324 @@ export default function AutomationsPage() {
             />
           </div>
 
+         <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+    <div>
+      <h2 className="text-xl font-bold text-slate-900">
+        Automation Settings
+      </h2>
+
+      <p className="mt-1 text-sm text-slate-500">
+        Configure workflow rules for this company.
+      </p>
+    </div>
+
+    {automationSettings && (
+      <div className="text-sm text-slate-500">
+        <p>
+          Last updated by{" "}
+          <span className="font-semibold text-slate-700">
+            {automationSettings.updated_by_name ||
+              "System"}
+          </span>
+        </p>
+
+        <p className="mt-1">
+          {formatDateTime(
+            automationSettings.updated_at
+          )}
+        </p>
+      </div>
+    )}
+  </div>
+
+  {loadingSettings ? (
+    <div className="mt-6 rounded-xl bg-slate-50 p-5 text-slate-500">
+      Loading automation settings...
+    </div>
+  ) : (
+    <div className="mt-6 space-y-6">
+      <div className="grid gap-5 xl:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="font-bold text-slate-900">
+                Stale Lead Automation
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Create follow-up tasks when leads have no
+                recorded CRM activity.
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={staleLeadEnabled}
+                onChange={(event) =>
+                  setStaleLeadEnabled(
+                    event.target.checked
+                  )
+                }
+                className="h-5 w-5"
+              />
+
+              <span className="text-sm font-semibold text-slate-700">
+                Enabled
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-5">
+            <label className="text-sm font-semibold text-slate-700">
+              Inactivity Threshold
+            </label>
+
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="number"
+                min="1"
+                max="365"
+                step="1"
+                value={staleDays}
+                onChange={(event) =>
+                  setStaleDays(event.target.value)
+                }
+                disabled={!staleLeadEnabled}
+                className="w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100 disabled:text-slate-400"
+              />
+<p
+  className={`mt-2 text-xs font-semibold ${
+    automationSettings?.stale_lead_enabled
+      ? "text-green-600"
+      : "text-slate-400"
+  }`}
+>
+  {automationSettings?.stale_lead_enabled
+    ? "Rule enabled"
+    : "Rule disabled"}
+</p>
+              <span className="text-sm text-slate-500">
+                days
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="font-bold text-slate-900">
+                WhatsApp SLA Automation
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Create urgent tasks when customers wait too
+                long for a WhatsApp response.
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={whatsappSlaEnabled}
+                onChange={(event) =>
+                  setWhatsappSlaEnabled(
+                    event.target.checked
+                  )
+                }
+                className="h-5 w-5"
+              />
+<p
+  className={`mt-2 text-xs font-semibold ${
+    automationSettings?.whatsapp_sla_enabled
+      ? "text-green-600"
+      : "text-slate-400"
+  }`}
+>
+  {automationSettings?.whatsapp_sla_enabled
+    ? "Rule enabled"
+    : "Rule disabled"}
+</p>
+              <span className="text-sm font-semibold text-slate-700">
+                Enabled
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-5">
+            <label className="text-sm font-semibold text-slate-700">
+              Response SLA
+            </label>
+
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="number"
+                min="1"
+                max="10080"
+                step="1"
+                value={whatsappSlaMinutes}
+                onChange={(event) =>
+                  setWhatsappSlaMinutes(
+                    event.target.value
+                  )
+                }
+                disabled={!whatsappSlaEnabled}
+                className="w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100 disabled:text-slate-400"
+              />
+
+              <span className="text-sm text-slate-500">
+                minutes
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-bold text-slate-900">
+              Business Hours
+            </h3>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Store the company operating schedule for
+              business-hour-aware SLA calculations.
+            </p>
+          </div>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={businessHoursEnabled}
+              onChange={(event) =>
+                setBusinessHoursEnabled(
+                  event.target.checked
+                )
+              }
+              className="h-5 w-5"
+            />
+
+            <span className="text-sm font-semibold text-slate-700">
+              Enabled
+            </span>
+          </label>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <label className="text-sm font-semibold text-slate-700">
+              Opening Time
+            </label>
+
+            <input
+              type="time"
+              value={businessDayStart}
+              onChange={(event) =>
+                setBusinessDayStart(
+                  event.target.value
+                )
+              }
+              disabled={!businessHoursEnabled}
+              className="mt-1 w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold text-slate-700">
+              Closing Time
+            </label>
+
+            <input
+              type="time"
+              value={businessDayEnd}
+              onChange={(event) =>
+                setBusinessDayEnd(
+                  event.target.value
+                )
+              }
+              disabled={!businessHoursEnabled}
+              className="mt-1 w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold text-slate-700">
+              Timezone
+            </label>
+
+            <select
+              value={timezoneName}
+              onChange={(event) =>
+                setTimezoneName(event.target.value)
+              }
+              disabled={!businessHoursEnabled}
+              className="mt-1 w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100"
+            >
+              <option value="Africa/Johannesburg">
+                South Africa
+              </option>
+            </select>
+          </div>
+
+          <div className="space-y-3 pt-1">
+            <label className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={includeSaturday}
+                onChange={(event) =>
+                  setIncludeSaturday(
+                    event.target.checked
+                  )
+                }
+                disabled={!businessHoursEnabled}
+                className="h-5 w-5"
+              />
+
+              <span className="text-sm font-semibold text-slate-700">
+                Include Saturday
+              </span>
+            </label>
+
+            <label className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={includeSunday}
+                onChange={(event) =>
+                  setIncludeSunday(
+                    event.target.checked
+                  )
+                }
+                disabled={!businessHoursEnabled}
+                className="h-5 w-5"
+              />
+
+              <span className="text-sm font-semibold text-slate-700">
+                Include Sunday
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={saveAutomationSettings}
+          disabled={savingSettings}
+          className="rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+        >
+          {savingSettings
+            ? "Saving Settings..."
+            : "Save Automation Settings"}
+        </button>
+      </div>
+    </div>
+  )}
+</div> 
+
           <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
             <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
               <h2 className="text-xl font-bold text-slate-900">
@@ -458,15 +1020,14 @@ export default function AutomationsPage() {
 
                   <div className="mt-1 flex items-center gap-3">
                     <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={staleDays}
-                      onChange={(event) =>
-                        setStaleDays(event.target.value)
-                      }
-                      className="w-full rounded-xl border border-slate-300 p-3"
-                    />
+  type="number"
+  value={
+    automationSettings?.stale_lead_days ??
+    staleDays
+  }
+  readOnly
+  className="w-full rounded-xl border border-slate-200 bg-slate-100 p-3 text-slate-600"
+/>
 
                     <span className="text-sm text-slate-500">
                       days
@@ -481,17 +1042,14 @@ export default function AutomationsPage() {
 
                   <div className="mt-1 flex items-center gap-3">
                     <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={whatsappSlaMinutes}
-                      onChange={(event) =>
-                        setWhatsappSlaMinutes(
-                          event.target.value
-                        )
-                      }
-                      className="w-full rounded-xl border border-slate-300 p-3"
-                    />
+  type="number"
+  value={
+    automationSettings?.whatsapp_sla_minutes ??
+    whatsappSlaMinutes
+  }
+  readOnly
+  className="w-full rounded-xl border border-slate-200 bg-slate-100 p-3 text-slate-600"
+/>
 
                     <span className="text-sm text-slate-500">
                       minutes
@@ -532,6 +1090,14 @@ export default function AutomationsPage() {
                         lastManualResult.run_id || "-"
                       }
                     />
+<ResultItem
+  label="Stale Rule"
+  value={
+    lastManualResult.stale_enabled
+      ? "Enabled"
+      : "Disabled"
+  }
+/>
 
                     <ResultItem
                       label="Stale Candidates"
@@ -548,7 +1114,14 @@ export default function AutomationsPage() {
                         0
                       }
                     />
-
+<ResultItem
+  label="WhatsApp Rule"
+  value={
+    lastManualResult.whatsapp_enabled
+      ? "Enabled"
+      : "Disabled"
+  }
+/>
                     <ResultItem
                       label="WhatsApp Candidates"
                       value={
@@ -564,6 +1137,7 @@ export default function AutomationsPage() {
                         0
                       }
                     />
+
                   </div>
                 </div>
               )}

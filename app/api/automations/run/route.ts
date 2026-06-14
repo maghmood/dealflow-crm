@@ -6,8 +6,6 @@ export const dynamic = "force-dynamic";
 
 type AutomationRequestBody = {
   companyId?: number;
-  staleDays?: number;
-  whatsappSlaMinutes?: number;
 };
 
 function getBearerToken(request: Request) {
@@ -18,32 +16,34 @@ function getBearerToken(request: Request) {
     return null;
   }
 
-  return authorization.slice("Bearer ".length).trim();
+  return authorization
+    .slice("Bearer ".length)
+    .trim();
 }
 
 async function runAutomations({
   companyId,
-  staleDays,
-  whatsappSlaMinutes,
   runSource,
 }: {
   companyId: number;
-  staleDays: number;
-  whatsappSlaMinutes: number;
-  runSource: "Manual" | "Vercel Cron" | "API";
+  runSource:
+    | "Manual"
+    | "Vercel Cron"
+    | "API";
 }) {
   const { data, error } = await supabaseAdmin.rpc(
-    "run_company_automations",
+    "run_company_automations_from_settings",
     {
       p_company_id: companyId,
-      p_stale_days: staleDays,
-      p_whatsapp_sla_minutes: whatsappSlaMinutes,
       p_run_source: runSource,
     }
   );
 
   if (error) {
-    console.error("AUTOMATION_RUN_RPC_ERROR", error);
+    console.error(
+      "AUTOMATION_RUN_RPC_ERROR",
+      error
+    );
 
     return {
       success: false,
@@ -53,7 +53,9 @@ async function runAutomations({
     };
   }
 
-  const result = Array.isArray(data) ? data[0] : data;
+  const result = Array.isArray(data)
+    ? data[0]
+    : data;
 
   console.log(
     "AUTOMATION_RUN_COMPLETED",
@@ -72,12 +74,15 @@ export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
-    console.error("CRON_SECRET is not configured.");
+    console.error(
+      "CRON_SECRET is not configured."
+    );
 
     return NextResponse.json(
       {
         success: false,
-        error: "Automation secret is not configured.",
+        error:
+          "Automation secret is not configured.",
       },
       { status: 500 }
     );
@@ -99,43 +104,15 @@ export async function GET(request: Request) {
     process.env.AUTOMATION_COMPANY_ID || "1"
   );
 
-  const staleDays = Number(
-    process.env.AUTOMATION_STALE_DAYS || "7"
-  );
-
-  const whatsappSlaMinutes = Number(
-    process.env.AUTOMATION_WHATSAPP_SLA_MINUTES || "30"
-  );
-
-  if (!Number.isInteger(companyId) || companyId <= 0) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Invalid AUTOMATION_COMPANY_ID.",
-      },
-      { status: 500 }
-    );
-  }
-
-  if (!Number.isInteger(staleDays) || staleDays < 1) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Invalid AUTOMATION_STALE_DAYS.",
-      },
-      { status: 500 }
-    );
-  }
-
   if (
-    !Number.isInteger(whatsappSlaMinutes) ||
-    whatsappSlaMinutes < 1
+    !Number.isInteger(companyId) ||
+    companyId <= 0
   ) {
     return NextResponse.json(
       {
         success: false,
         error:
-          "Invalid AUTOMATION_WHATSAPP_SLA_MINUTES.",
+          "Invalid AUTOMATION_COMPANY_ID.",
       },
       { status: 500 }
     );
@@ -143,8 +120,6 @@ export async function GET(request: Request) {
 
   const result = await runAutomations({
     companyId,
-    staleDays,
-    whatsappSlaMinutes,
     runSource: "Vercel Cron",
   });
 
@@ -166,38 +141,58 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: "Missing authorization token.",
+        error:
+          "Missing authorization token.",
       },
       { status: 401 }
     );
   }
 
-  const { data: userData, error: userError } =
-    await supabaseAdmin.auth.getUser(accessToken);
+  const {
+    data: userData,
+    error: userError,
+  } = await supabaseAdmin.auth.getUser(
+    accessToken
+  );
 
-  if (userError || !userData.user) {
+  if (
+    userError ||
+    !userData.user
+  ) {
     return NextResponse.json(
       {
         success: false,
-        error: "Invalid or expired login.",
+        error:
+          "Invalid or expired login.",
       },
       { status: 401 }
     );
   }
 
-  const { data: profile, error: profileError } =
-    await supabaseAdmin
-      .from("user_profiles")
-      .select("id, company_id, role, status")
-      .eq("auth_user_id", userData.user.id)
-      .eq("status", "Active")
-      .maybeSingle();
+  const {
+    data: profile,
+    error: profileError,
+  } = await supabaseAdmin
+    .from("user_profiles")
+    .select(
+      "id, company_id, role, status"
+    )
+    .eq(
+      "auth_user_id",
+      userData.user.id
+    )
+    .eq("status", "Active")
+    .maybeSingle();
 
-  if (profileError || !profile) {
+  if (
+    profileError ||
+    !profile
+  ) {
     return NextResponse.json(
       {
         success: false,
-        error: "Active user profile not found.",
+        error:
+          "Active user profile not found.",
       },
       { status: 403 }
     );
@@ -226,53 +221,26 @@ export async function POST(request: Request) {
   }
 
   const companyId = Number(
-    body.companyId || profile.company_id
+    body.companyId ||
+      profile.company_id
   );
-
-  if (companyId !== Number(profile.company_id)) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Company access denied.",
-      },
-      { status: 403 }
-    );
-  }
-
-  const staleDays = Number(body.staleDays || 7);
-
-  const whatsappSlaMinutes = Number(
-    body.whatsappSlaMinutes || 30
-  );
-
-  if (!Number.isInteger(staleDays) || staleDays < 1) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Stale days must be at least 1.",
-      },
-      { status: 400 }
-    );
-  }
 
   if (
-    !Number.isInteger(whatsappSlaMinutes) ||
-    whatsappSlaMinutes < 1
+    companyId !==
+    Number(profile.company_id)
   ) {
     return NextResponse.json(
       {
         success: false,
         error:
-          "WhatsApp SLA minutes must be at least 1.",
+          "Company access denied.",
       },
-      { status: 400 }
+      { status: 403 }
     );
   }
 
   const result = await runAutomations({
     companyId,
-    staleDays,
-    whatsappSlaMinutes,
     runSource: "Manual",
   });
 
