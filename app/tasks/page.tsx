@@ -23,6 +23,12 @@ type Task = {
   created_by_name: string | null;
   completed_at: string | null;
   created_at: string | null;
+
+  is_automated: boolean;
+  automation_type: string | null;
+  automation_key: string | null;
+  automation_generated_at: string | null;
+  automation_last_checked_at: string | null;
 };
 
 export default function TasksPage() {
@@ -32,7 +38,8 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("Open");
   const [searchTerm, setSearchTerm] = useState("");
-
+const [automationFilter, setAutomationFilter] =
+  useState("All");
   async function fetchTasks() {
     if (!profile?.company_id) return;
 
@@ -84,18 +91,31 @@ export default function TasksPage() {
   }
 
   const filteredTasks = tasks.filter((task) => {
-    const search = searchTerm.toLowerCase();
+  const search = searchTerm.trim().toLowerCase();
 
-    const matchesSearch =
-      task.title.toLowerCase().includes(search) ||
-      (task.description || "").toLowerCase().includes(search) ||
-      (task.assigned_user_name || "").toLowerCase().includes(search);
+  const matchesSearch =
+    task.title.toLowerCase().includes(search) ||
+    (task.description || "").toLowerCase().includes(search) ||
+    (task.assigned_user_name || "").toLowerCase().includes(search) ||
+    (task.automation_type || "").toLowerCase().includes(search);
 
-    const matchesStatus =
-      statusFilter === "All" || (task.status || "Open") === statusFilter;
+  const matchesStatus =
+    statusFilter === "All" ||
+    (task.status || "Open") === statusFilter;
 
-    return matchesSearch && matchesStatus;
-  });
+  const matchesAutomation =
+    automationFilter === "All" ||
+    (automationFilter === "Automated" &&
+      task.is_automated) ||
+    (automationFilter === "Manual" &&
+      !task.is_automated);
+
+  return (
+    matchesSearch &&
+    matchesStatus &&
+    matchesAutomation
+  );
+});
 
   const overdueCount = tasks.filter((task) => {
     if (!task.due_date || task.status === "Completed") return false;
@@ -103,7 +123,17 @@ export default function TasksPage() {
   }).length;
 
   const openCount = tasks.filter((task) => task.status !== "Completed").length;
+const automatedOpenCount = tasks.filter(
+  (task) =>
+    task.is_automated &&
+    task.status !== "Completed"
+).length;
 
+const manualOpenCount = tasks.filter(
+  (task) =>
+    !task.is_automated &&
+    task.status !== "Completed"
+).length;
   return (
   <DashboardLayout>
     <PageAccessGuard module="tasks">
@@ -115,31 +145,53 @@ export default function TasksPage() {
         </p>
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-xl bg-white p-6 shadow">
-          <p className="text-sm text-slate-500">Open Tasks</p>
-          <h2 className="mt-2 text-3xl font-bold text-slate-800">
-            {openCount}
-          </h2>
-        </div>
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+  <div className="rounded-xl bg-white p-6 shadow">
+    <p className="text-sm text-slate-500">Open Tasks</p>
 
-        <div className="rounded-xl bg-white p-6 shadow">
-          <p className="text-sm text-slate-500">Overdue</p>
-          <h2 className="mt-2 text-3xl font-bold text-red-600">
-            {overdueCount}
-          </h2>
-        </div>
+    <h2 className="mt-2 text-3xl font-bold text-slate-800">
+      {openCount}
+    </h2>
+  </div>
 
-        <div className="rounded-xl bg-white p-6 shadow">
-          <p className="text-sm text-slate-500">Total Tasks</p>
-          <h2 className="mt-2 text-3xl font-bold text-slate-800">
-            {tasks.length}
-          </h2>
-        </div>
-      </div>
+  <div className="rounded-xl bg-white p-6 shadow">
+    <p className="text-sm text-slate-500">Overdue</p>
 
+    <h2 className="mt-2 text-3xl font-bold text-red-600">
+      {overdueCount}
+    </h2>
+  </div>
+
+  <div className="rounded-xl bg-white p-6 shadow">
+    <p className="text-sm text-slate-500">Total Tasks</p>
+
+    <h2 className="mt-2 text-3xl font-bold text-slate-800">
+      {tasks.length}
+    </h2>
+  </div>
+
+  <div className="rounded-xl bg-white p-6 shadow">
+    <p className="text-sm text-slate-500">
+      Automated Open
+    </p>
+
+    <h2 className="mt-2 text-3xl font-bold text-blue-700">
+      {automatedOpenCount}
+    </h2>
+  </div>
+
+  <div className="rounded-xl bg-white p-6 shadow">
+    <p className="text-sm text-slate-500">
+      Manual Open
+    </p>
+
+    <h2 className="mt-2 text-3xl font-bold text-slate-800">
+      {manualOpenCount}
+    </h2>
+  </div>
+</div>
       <div className="mb-6 rounded-xl bg-white p-5 shadow">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <input
             type="text"
             placeholder="Search tasks, notes or assignee..."
@@ -157,6 +209,19 @@ export default function TasksPage() {
             <option value="Open">Open</option>
             <option value="Completed">Completed</option>
           </select>
+          <select
+  value={automationFilter}
+  onChange={(event) =>
+    setAutomationFilter(event.target.value)
+  }
+  className="rounded-lg border border-slate-300 p-3"
+>
+  <option value="All">All Sources</option>
+  <option value="Automated">
+    Automated Tasks
+  </option>
+  <option value="Manual">Manual Tasks</option>
+</select>
         </div>
       </div>
 
@@ -203,14 +268,30 @@ export default function TasksPage() {
                     }`}
                   >
                     <td className="px-6 py-4">
-                      <p className="font-medium text-slate-800">
-                        {task.title}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+  <p className="font-medium text-slate-800">
+    {task.title}
+  </p>
+
+  {task.is_automated && (
+    <span className="rounded-full bg-blue-100 px-2 py-1 text-[11px] font-semibold text-blue-700">
+      Automated
+    </span>
+  )}
+</div>
                       {task.description && (
                         <p className="mt-1 text-sm text-slate-500">
                           {task.description}
                         </p>
                       )}
+                      {task.is_automated && task.automation_type && (
+  <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-blue-600">
+    Rule:{" "}
+    {task.automation_type
+      .replaceAll("_", " ")
+      .toLowerCase()}
+  </p>
+)}
                       {task.lead_id && (
                         <Link
                           href={`/leads/${task.lead_id}`}
@@ -232,9 +313,19 @@ export default function TasksPage() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
-                        {task.priority || "Medium"}
-                      </span>
+                      <span
+  className={`rounded-full px-3 py-1 text-sm font-semibold ${
+    task.priority === "Urgent"
+      ? "bg-red-100 text-red-700"
+      : task.priority === "High"
+      ? "bg-orange-100 text-orange-700"
+      : task.priority === "Low"
+      ? "bg-blue-100 text-blue-700"
+      : "bg-slate-100 text-slate-700"
+  }`}
+>
+  {task.priority || "Medium"}
+</span>
                     </td>
 
                     <td className="px-6 py-4">
