@@ -110,6 +110,15 @@ export default function DashboardLayout({
     ...(canAccessRole(profile?.role, "reports")
       ? [{ label: "Reports", href: "/reports" }]
       : []),
+
+          ...(canAccessRole(profile?.role, "automations")
+      ? [
+          {
+            label: "Automation Monitoring",
+            href: "/automations",
+          },
+        ]
+      : []),
   ];
 
   async function fetchNotifications() {

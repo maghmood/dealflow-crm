@@ -20,6 +20,7 @@ export type AppModule =
   | "inventory"
   | "deals"
   | "reports"
+  | "automations"
   | "settings"
   | "userManagement";
 
@@ -37,6 +38,7 @@ const permissions: Record<UserRole, AppModule[]> = {
     "inventory",
     "deals",
     "reports",
+    "automations",
     "settings",
     "userManagement",
     "whatsapp",
@@ -55,6 +57,7 @@ const permissions: Record<UserRole, AppModule[]> = {
     "inventory",
     "deals",
     "reports",
+    "automations",
     "settings",
     "whatsapp",
   ],
