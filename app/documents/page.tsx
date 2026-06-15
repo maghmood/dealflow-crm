@@ -24,11 +24,11 @@ type DocumentItem = {
 };
 
 const DOCUMENT_TYPES = [
-  "ID Copy",
+  "ID Document",
   "Payslip",
   "Bank Statement",
   "Proof of Address",
-  "Driver License",
+  "Drivers License",
   "Settlement Letter",
   "Trade-In Docs",
   "Signed OTP",

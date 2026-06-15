@@ -15,12 +15,22 @@ type AutomationRun = {
     | "Completed"
     | "Partially Completed"
     | "Failed";
+
   stale_threshold_days: number | null;
   whatsapp_sla_minutes: number | null;
+
   stale_candidate_count: number;
   stale_processed_count: number;
+
   whatsapp_candidate_count: number;
   whatsapp_processed_count: number;
+
+  document_candidate_count: number;
+  document_processed_count: number;
+
+  finance_candidate_count: number;
+  finance_processed_count: number;
+
   error_message: string | null;
   started_at: string;
   completed_at: string | null;
@@ -38,6 +48,14 @@ type ManualRunResult = {
   whatsapp_candidates?: number;
   whatsapp_processed?: number;
 
+  document_enabled?: boolean;
+  document_candidates?: number;
+  document_processed?: number;
+
+  finance_enabled?: boolean;
+  finance_candidates?: number;
+  finance_processed?: number;
+
   error_message?: string | null;
 };
 
@@ -50,6 +68,12 @@ type AutomationSettings = {
 
   whatsapp_sla_enabled: boolean;
   whatsapp_sla_minutes: number;
+
+  document_reminder_enabled: boolean;
+  document_reminder_delay_days: number;
+
+  finance_reminder_enabled: boolean;
+  finance_follow_up_days: number;
 
   business_hours_enabled: boolean;
   business_day_start: string;
@@ -115,6 +139,8 @@ function formatDuration(
   return `${minutes} min ${remainingSeconds} sec`;
 }
 
+
+
 function statusStyle(status: AutomationRun["status"]) {
   if (status === "Completed") {
     return "bg-green-100 text-green-700";
@@ -145,6 +171,25 @@ const [loadingSettings, setLoadingSettings] =
 
 const [savingSettings, setSavingSettings] =
   useState(false);
+const [
+  documentReminderEnabled,
+  setDocumentReminderEnabled,
+] = useState(true);
+
+const [
+  documentReminderDelayDays,
+  setDocumentReminderDelayDays,
+] = useState("1");
+
+const [
+  financeReminderEnabled,
+  setFinanceReminderEnabled,
+] = useState(true);
+
+const [
+  financeFollowUpDays,
+  setFinanceFollowUpDays,
+] = useState("3");
 
 const [staleLeadEnabled, setStaleLeadEnabled] =
   useState(true);
@@ -187,8 +232,8 @@ const [timezoneName, setTimezoneName] =
   const { data, error } = await supabase
     .from("automation_settings")
     .select(
-      "id, company_id, stale_lead_enabled, stale_lead_days, whatsapp_sla_enabled, whatsapp_sla_minutes, business_hours_enabled, business_day_start, business_day_end, include_saturday, include_sunday, timezone_name, updated_by_id, updated_by_name, created_at, updated_at"
-    )
+  "id, company_id, stale_lead_enabled, stale_lead_days, whatsapp_sla_enabled, whatsapp_sla_minutes, document_reminder_enabled, document_reminder_delay_days, finance_reminder_enabled, finance_follow_up_days, business_hours_enabled, business_day_start, business_day_end, include_saturday, include_sunday, timezone_name, updated_by_id, updated_by_name, created_at, updated_at"
+)
     .eq("company_id", profile.company_id)
     .maybeSingle();
 
@@ -224,6 +269,24 @@ const [timezoneName, setTimezoneName] =
     String(settings.whatsapp_sla_minutes)
   );
 
+  setDocumentReminderEnabled(
+  settings.document_reminder_enabled
+);
+
+setDocumentReminderDelayDays(
+  String(
+    settings.document_reminder_delay_days
+  )
+);
+
+setFinanceReminderEnabled(
+  settings.finance_reminder_enabled
+);
+
+setFinanceFollowUpDays(
+  String(settings.finance_follow_up_days)
+);
+
   setBusinessHoursEnabled(
     settings.business_hours_enabled
   );
@@ -255,8 +318,8 @@ const [timezoneName, setTimezoneName] =
     const { data, error } = await supabase
       .from("automation_runs")
       .select(
-        "id, company_id, run_source, status, stale_threshold_days, whatsapp_sla_minutes, stale_candidate_count, stale_processed_count, whatsapp_candidate_count, whatsapp_processed_count, error_message, started_at, completed_at"
-      )
+  "id, company_id, run_source, status, stale_threshold_days, whatsapp_sla_minutes, stale_candidate_count, stale_processed_count, whatsapp_candidate_count, whatsapp_processed_count, document_candidate_count, document_processed_count, finance_candidate_count, finance_processed_count, error_message, started_at, completed_at"
+)
       .eq("company_id", profile.company_id)
       .order("started_at", { ascending: false })
       .limit(100);
@@ -335,7 +398,13 @@ const [timezoneName, setTimezoneName] =
   const whatsappSlaNumber = Number(
     whatsappSlaMinutes
   );
+  const documentDelayNumber = Number(
+  documentReminderDelayDays
+);
 
+const financeFollowUpNumber = Number(
+  financeFollowUpDays
+);
   if (
     !Number.isInteger(staleDaysNumber) ||
     staleDaysNumber < 1 ||
@@ -357,7 +426,27 @@ const [timezoneName, setTimezoneName] =
     );
     return;
   }
+  if (
+  !Number.isInteger(documentDelayNumber) ||
+  documentDelayNumber < 0 ||
+  documentDelayNumber > 365
+) {
+  alert(
+    "Document reminder delay must be between 0 and 365 days."
+  );
+  return;
+}
 
+if (
+  !Number.isInteger(financeFollowUpNumber) ||
+  financeFollowUpNumber < 1 ||
+  financeFollowUpNumber > 365
+) {
+  alert(
+    "Finance follow-up threshold must be between 1 and 365 days."
+  );
+  return;
+}
   if (
     businessHoursEnabled &&
     businessDayEnd <= businessDayStart
@@ -378,7 +467,17 @@ const [timezoneName, setTimezoneName] =
 
     whatsapp_sla_enabled: whatsappSlaEnabled,
     whatsapp_sla_minutes: whatsappSlaNumber,
+    document_reminder_enabled:
+  documentReminderEnabled,
 
+document_reminder_delay_days:
+  documentDelayNumber,
+
+finance_reminder_enabled:
+  financeReminderEnabled,
+
+finance_follow_up_days:
+  financeFollowUpNumber,
     business_hours_enabled: businessHoursEnabled,
     business_day_start: businessDayStart,
     business_day_end: businessDayEnd,
@@ -401,8 +500,8 @@ const [timezoneName, setTimezoneName] =
       onConflict: "company_id",
     })
     .select(
-      "id, company_id, stale_lead_enabled, stale_lead_days, whatsapp_sla_enabled, whatsapp_sla_minutes, business_hours_enabled, business_day_start, business_day_end, include_saturday, include_sunday, timezone_name, updated_by_id, updated_by_name, created_at, updated_at"
-    )
+  "id, company_id, stale_lead_enabled, stale_lead_days, whatsapp_sla_enabled, whatsapp_sla_minutes, document_reminder_enabled, document_reminder_delay_days, finance_reminder_enabled, finance_follow_up_days, business_hours_enabled, business_day_start, business_day_end, include_saturday, include_sunday, timezone_name, updated_by_id, updated_by_name, created_at, updated_at"
+)
     .single();
 
   if (error) {
@@ -415,13 +514,63 @@ const [timezoneName, setTimezoneName] =
     return;
   }
 
-  setAutomationSettings(
-    data as AutomationSettings
-  );
+  const savedSettings =
+  data as AutomationSettings;
 
-  setSavingSettings(false);
+setAutomationSettings(savedSettings);
 
-  alert("Automation settings saved successfully.");
+setStaleLeadEnabled(
+  savedSettings.stale_lead_enabled
+);
+setStaleDays(
+  String(savedSettings.stale_lead_days)
+);
+
+setWhatsappSlaEnabled(
+  savedSettings.whatsapp_sla_enabled
+);
+setWhatsappSlaMinutes(
+  String(savedSettings.whatsapp_sla_minutes)
+);
+
+setDocumentReminderEnabled(
+  savedSettings.document_reminder_enabled
+);
+setDocumentReminderDelayDays(
+  String(
+    savedSettings.document_reminder_delay_days
+  )
+);
+
+setFinanceReminderEnabled(
+  savedSettings.finance_reminder_enabled
+);
+setFinanceFollowUpDays(
+  String(savedSettings.finance_follow_up_days)
+);
+
+setBusinessHoursEnabled(
+  savedSettings.business_hours_enabled
+);
+setBusinessDayStart(
+  savedSettings.business_day_start.slice(0, 5)
+);
+setBusinessDayEnd(
+  savedSettings.business_day_end.slice(0, 5)
+);
+setIncludeSaturday(
+  savedSettings.include_saturday
+);
+setIncludeSunday(
+  savedSettings.include_sunday
+);
+setTimezoneName(
+  savedSettings.timezone_name
+);
+
+setSavingSettings(false);
+
+alert("Automation settings saved successfully.");
 }
 
   async function runAutomationsNow() {
@@ -436,26 +585,36 @@ const [timezoneName, setTimezoneName] =
   }
 
   if (
-    !automationSettings.stale_lead_enabled &&
-    !automationSettings.whatsapp_sla_enabled
-  ) {
-    alert(
-      "At least one automation rule must be enabled."
-    );
-    return;
-  }
+  !automationSettings.stale_lead_enabled &&
+  !automationSettings.whatsapp_sla_enabled &&
+  !automationSettings.document_reminder_enabled &&
+  !automationSettings.finance_reminder_enabled
+) {
+  alert(
+    "At least one automation rule must be enabled."
+  );
+  return;
+}
 
   const enabledRules = [
-    automationSettings.stale_lead_enabled
-      ? `Stale leads after ${automationSettings.stale_lead_days} days`
-      : null,
+  automationSettings.stale_lead_enabled
+    ? `Stale leads after ${automationSettings.stale_lead_days} days`
+    : null,
 
-    automationSettings.whatsapp_sla_enabled
-      ? `WhatsApp SLA after ${automationSettings.whatsapp_sla_minutes} minutes`
-      : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  automationSettings.whatsapp_sla_enabled
+    ? `WhatsApp SLA after ${automationSettings.whatsapp_sla_minutes} minutes`
+    : null,
+
+  automationSettings.document_reminder_enabled
+    ? `Missing document reminder after ${automationSettings.document_reminder_delay_days} days`
+    : null,
+
+  automationSettings.finance_reminder_enabled
+    ? `Finance follow-up after ${automationSettings.finance_follow_up_days} days`
+    : null,
+]
+  .filter(Boolean)
+  .join("\n");
 
   const confirmed = window.confirm(
     `Run the saved automation settings now?\n\n${enabledRules}`
@@ -607,7 +766,23 @@ const [timezoneName, setTimezoneName] =
       Number(run.whatsapp_processed_count || 0),
     0
   );
+const totalDocumentProcessed = runs.reduce(
+  (sum, run) =>
+    sum +
+    Number(
+      run.document_processed_count || 0
+    ),
+  0
+);
 
+const totalFinanceProcessed = runs.reduce(
+  (sum, run) =>
+    sum +
+    Number(
+      run.finance_processed_count || 0
+    ),
+  0
+);
   return (
     <DashboardLayout>
       <PageAccessGuard module="automations">
@@ -681,6 +856,17 @@ const [timezoneName, setTimezoneName] =
               value={totalWhatsappProcessed}
               color="green"
             />
+            <MetricCard
+  label="Document Checks Processed"
+  value={totalDocumentProcessed}
+  color="purple"
+/>
+
+<MetricCard
+  label="Finance Checks Processed"
+  value={totalFinanceProcessed}
+  color="blue"
+/>
           </div>
 
          <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
@@ -720,7 +906,7 @@ const [timezoneName, setTimezoneName] =
     </div>
   ) : (
     <div className="mt-6 space-y-6">
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <div className="rounded-xl border border-slate-200 p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -753,109 +939,234 @@ const [timezoneName, setTimezoneName] =
           </div>
 
           <div className="mt-5">
-            <label className="text-sm font-semibold text-slate-700">
-              Inactivity Threshold
-            </label>
+  <label className="text-sm font-semibold text-slate-700">
+    Inactivity Threshold
+  </label>
 
-            <div className="mt-1 flex items-center gap-3">
-              <input
-                type="number"
-                min="1"
-                max="365"
-                step="1"
-                value={staleDays}
-                onChange={(event) =>
-                  setStaleDays(event.target.value)
-                }
-                disabled={!staleLeadEnabled}
-                className="w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100 disabled:text-slate-400"
-              />
-<p
-  className={`mt-2 text-xs font-semibold ${
-    automationSettings?.stale_lead_enabled
-      ? "text-green-600"
-      : "text-slate-400"
-  }`}
->
-  {automationSettings?.stale_lead_enabled
-    ? "Rule enabled"
-    : "Rule disabled"}
-</p>
-              <span className="text-sm text-slate-500">
-                days
-              </span>
-            </div>
-          </div>
+  <div className="mt-1 flex items-center gap-3">
+    <input
+      type="number"
+      min="1"
+      max="365"
+      step="1"
+      value={staleDays}
+      onChange={(event) =>
+        setStaleDays(event.target.value)
+      }
+      disabled={!staleLeadEnabled}
+      className="w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100 disabled:text-slate-400"
+    />
+
+    <span className="text-sm text-slate-500">
+      days
+    </span>
+  </div>
+
+  <p
+    className={`mt-2 text-xs font-semibold ${
+      staleLeadEnabled
+        ? "text-green-600"
+        : "text-slate-400"
+    }`}
+  >
+    {staleLeadEnabled
+      ? "Rule enabled"
+      : "Rule disabled"}
+  </p>
+</div>
         </div>
 
         <div className="rounded-xl border border-slate-200 p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="font-bold text-slate-900">
-                WhatsApp SLA Automation
-              </h3>
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <h3 className="font-bold text-slate-900">
+        WhatsApp SLA Automation
+      </h3>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Create urgent tasks when customers wait too
-                long for a WhatsApp response.
-              </p>
-            </div>
+      <p className="mt-1 text-sm text-slate-500">
+        Create urgent tasks when customers wait too
+        long for a WhatsApp response.
+      </p>
+    </div>
 
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={whatsappSlaEnabled}
-                onChange={(event) =>
-                  setWhatsappSlaEnabled(
-                    event.target.checked
-                  )
-                }
-                className="h-5 w-5"
-              />
-<p
-  className={`mt-2 text-xs font-semibold ${
-    automationSettings?.whatsapp_sla_enabled
-      ? "text-green-600"
-      : "text-slate-400"
-  }`}
->
-  {automationSettings?.whatsapp_sla_enabled
-    ? "Rule enabled"
-    : "Rule disabled"}
-</p>
-              <span className="text-sm font-semibold text-slate-700">
-                Enabled
-              </span>
-            </label>
-          </div>
+    <label className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={whatsappSlaEnabled}
+        onChange={(event) =>
+          setWhatsappSlaEnabled(
+            event.target.checked
+          )
+        }
+        className="h-5 w-5"
+      />
 
-          <div className="mt-5">
-            <label className="text-sm font-semibold text-slate-700">
-              Response SLA
-            </label>
+      <span className="text-sm font-semibold text-slate-700">
+        Enabled
+      </span>
+    </label>
+  </div>
 
-            <div className="mt-1 flex items-center gap-3">
-              <input
-                type="number"
-                min="1"
-                max="10080"
-                step="1"
-                value={whatsappSlaMinutes}
-                onChange={(event) =>
-                  setWhatsappSlaMinutes(
-                    event.target.value
-                  )
-                }
-                disabled={!whatsappSlaEnabled}
-                className="w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100 disabled:text-slate-400"
-              />
+  <div className="mt-5">
+    <label className="text-sm font-semibold text-slate-700">
+      Response SLA
+    </label>
 
-              <span className="text-sm text-slate-500">
-                minutes
-              </span>
-            </div>
-          </div>
-        </div>
+    <div className="mt-1 flex items-center gap-3">
+      <input
+        type="number"
+        min="1"
+        max="10080"
+        step="1"
+        value={whatsappSlaMinutes}
+        onChange={(event) =>
+          setWhatsappSlaMinutes(
+            event.target.value
+          )
+        }
+        disabled={!whatsappSlaEnabled}
+        className="w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100 disabled:text-slate-400"
+      />
+
+      <span className="text-sm text-slate-500">
+        minutes
+      </span>
+    </div>
+
+    <p
+      className={`mt-2 text-xs font-semibold ${
+        whatsappSlaEnabled
+          ? "text-green-600"
+          : "text-slate-400"
+      }`}
+    >
+      {whatsappSlaEnabled
+        ? "Rule enabled"
+        : "Rule disabled"}
+    </p>
+  </div>
+</div>
+        <div className="rounded-xl border border-slate-200 p-5">
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <h3 className="font-bold text-slate-900">
+        Missing Document Reminders
+      </h3>
+
+      <p className="mt-1 text-sm text-slate-500">
+        Create tasks when submitted finance applications
+        are missing required customer documents.
+      </p>
+    </div>
+
+    <label className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={documentReminderEnabled}
+        onChange={(event) =>
+          setDocumentReminderEnabled(
+            event.target.checked
+          )
+        }
+        className="h-5 w-5"
+      />
+
+      <span className="text-sm font-semibold text-slate-700">
+        Enabled
+      </span>
+    </label>
+  </div>
+
+  <div className="mt-5">
+    <label className="text-sm font-semibold text-slate-700">
+      Reminder Delay
+    </label>
+
+    <div className="mt-1 flex items-center gap-3">
+      <input
+        type="number"
+        min="0"
+        max="365"
+        step="1"
+        value={documentReminderDelayDays}
+        onChange={(event) =>
+          setDocumentReminderDelayDays(
+            event.target.value
+          )
+        }
+        disabled={!documentReminderEnabled}
+        className="w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100 disabled:text-slate-400"
+      />
+
+      <span className="text-sm text-slate-500">
+        days
+      </span>
+    </div>
+
+    <p className="mt-2 text-xs text-slate-500">
+      Use 0 to create a reminder immediately after
+      submission.
+    </p>
+  </div>
+</div>
+<div className="rounded-xl border border-slate-200 p-5">
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <h3 className="font-bold text-slate-900">
+        Finance Follow-up Reminders
+      </h3>
+
+      <p className="mt-1 text-sm text-slate-500">
+        Create follow-up tasks when submitted finance
+        applications have no recent update.
+      </p>
+    </div>
+
+    <label className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={financeReminderEnabled}
+        onChange={(event) =>
+          setFinanceReminderEnabled(
+            event.target.checked
+          )
+        }
+        className="h-5 w-5"
+      />
+
+      <span className="text-sm font-semibold text-slate-700">
+        Enabled
+      </span>
+    </label>
+  </div>
+
+  <div className="mt-5">
+    <label className="text-sm font-semibold text-slate-700">
+      Follow-up Threshold
+    </label>
+
+    <div className="mt-1 flex items-center gap-3">
+      <input
+        type="number"
+        min="1"
+        max="365"
+        step="1"
+        value={financeFollowUpDays}
+        onChange={(event) =>
+          setFinanceFollowUpDays(
+            event.target.value
+          )
+        }
+        disabled={!financeReminderEnabled}
+        className="w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100 disabled:text-slate-400"
+      />
+
+      <span className="text-sm text-slate-500">
+        days
+      </span>
+    </div>
+  </div>
+</div>
       </div>
 
       <div className="rounded-xl border border-slate-200 p-5">
@@ -1028,8 +1339,8 @@ const [timezoneName, setTimezoneName] =
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Execute both workflow rules immediately using
-                the thresholds below.
+                Execute all enabled workflow rules immediately
+using the saved company settings.
               </p>
 
               <div className="mt-5 space-y-4">
@@ -1062,21 +1373,90 @@ const [timezoneName, setTimezoneName] =
 
                   <div className="mt-1 flex items-center gap-3">
                     <input
-  type="number"
-  value={
-    automationSettings?.whatsapp_sla_minutes ??
-    whatsappSlaMinutes
-  }
-  readOnly
-  className="w-full rounded-xl border border-slate-200 bg-slate-100 p-3 text-slate-600"
-/>
+                      type="number"
+                      value={
+                        automationSettings?.whatsapp_sla_minutes ??
+                        whatsappSlaMinutes
+                      }
+                      readOnly
+                      className="w-full rounded-xl border border-slate-200 bg-slate-100 p-3 text-slate-600"
+                    />
 
                     <span className="text-sm text-slate-500">
                       minutes
                     </span>
                   </div>
                 </div>
+                <div>
+  <label className="text-sm font-semibold text-slate-700">
+    Missing Document Reminder
+  </label>
 
+  <div className="mt-1 flex items-center gap-3">
+    <input
+      type="number"
+      value={
+        automationSettings
+          ?.document_reminder_delay_days ??
+        documentReminderDelayDays
+      }
+      readOnly
+      className="w-full rounded-xl border border-slate-200 bg-slate-100 p-3 text-slate-600"
+    />
+
+    <span className="text-sm text-slate-500">
+      days
+    </span>
+  </div>
+
+  <p
+    className={`mt-2 text-xs font-semibold ${
+      automationSettings
+        ?.document_reminder_enabled
+        ? "text-green-600"
+        : "text-slate-400"
+    }`}
+  >
+    {automationSettings
+      ?.document_reminder_enabled
+      ? "Rule enabled"
+      : "Rule disabled"}
+  </p>
+</div>
+
+<div>
+  <label className="text-sm font-semibold text-slate-700">
+    Finance Follow-up
+  </label>
+
+  <div className="mt-1 flex items-center gap-3">
+    <input
+      type="number"
+      value={
+        automationSettings?.finance_follow_up_days ??
+        financeFollowUpDays
+      }
+      readOnly
+      className="w-full rounded-xl border border-slate-200 bg-slate-100 p-3 text-slate-600"
+    />
+
+    <span className="text-sm text-slate-500">
+      days
+    </span>
+  </div>
+
+  <p
+    className={`mt-2 text-xs font-semibold ${
+      automationSettings?.finance_reminder_enabled
+        ? "text-green-600"
+        : "text-slate-400"
+    }`}
+  >
+    {automationSettings?.finance_reminder_enabled
+      ? "Rule enabled"
+      : "Rule disabled"}
+  </p>
+</div>
                 <button
                   type="button"
                   onClick={runAutomationsNow}
@@ -1157,6 +1537,52 @@ const [timezoneName, setTimezoneName] =
                         0
                       }
                     />
+
+                    <ResultItem
+  label="Document Rule"
+  value={
+    lastManualResult.document_enabled
+      ? "Enabled"
+      : "Disabled"
+  }
+/>
+
+<ResultItem
+  label="Document Candidates"
+  value={
+    lastManualResult.document_candidates || 0
+  }
+/>
+
+<ResultItem
+  label="Document Processed"
+  value={
+    lastManualResult.document_processed || 0
+  }
+/>
+
+<ResultItem
+  label="Finance Rule"
+  value={
+    lastManualResult.finance_enabled
+      ? "Enabled"
+      : "Disabled"
+  }
+/>
+
+<ResultItem
+  label="Finance Candidates"
+  value={
+    lastManualResult.finance_candidates || 0
+  }
+/>
+
+<ResultItem
+  label="Finance Processed"
+  value={
+    lastManualResult.finance_processed || 0
+  }
+/>
 
                   </div>
                 </div>
@@ -1311,7 +1737,7 @@ const [timezoneName, setTimezoneName] =
                   Loading automation runs...
                 </div>
               ) : (
-                <table className="min-w-[1350px]">
+                <table className="min-w-[1800px]">
                   <thead className="bg-slate-50">
                     <tr>
                       <TableHeading>Run</TableHeading>
@@ -1341,6 +1767,21 @@ const [timezoneName, setTimezoneName] =
                       <TableHeading>
                         WA Processed
                       </TableHeading>
+                      <TableHeading>
+  Document Candidates
+</TableHeading>
+
+<TableHeading>
+  Document Processed
+</TableHeading>
+
+<TableHeading>
+  Finance Candidates
+</TableHeading>
+
+<TableHeading>
+  Finance Processed
+</TableHeading>
                       <TableHeading>Error</TableHeading>
                     </tr>
                   </thead>
@@ -1407,7 +1848,21 @@ const [timezoneName, setTimezoneName] =
                         <TableCell>
                           {run.whatsapp_processed_count}
                         </TableCell>
+                        <TableCell>
+  {run.document_candidate_count}
+</TableCell>
 
+<TableCell>
+  {run.document_processed_count}
+</TableCell>
+
+<TableCell>
+  {run.finance_candidate_count}
+</TableCell>
+
+<TableCell>
+  {run.finance_processed_count}
+</TableCell>
                         <TableCell>
                           {run.error_message || "-"}
                         </TableCell>
@@ -1417,7 +1872,7 @@ const [timezoneName, setTimezoneName] =
                     {filteredRuns.length === 0 && (
                       <tr>
                         <td
-                          colSpan={12}
+                          colSpan={16}
                           className="px-4 py-10 text-center text-slate-500"
                         >
                           No automation runs found.
