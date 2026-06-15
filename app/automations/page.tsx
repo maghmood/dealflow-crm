@@ -30,7 +30,8 @@ type AutomationRun = {
 
   finance_candidate_count: number;
   finance_processed_count: number;
-
+  escalation_candidate_count: number;
+escalation_processed_count: number;
   error_message: string | null;
   started_at: string;
   completed_at: string | null;
@@ -55,7 +56,9 @@ type ManualRunResult = {
   finance_enabled?: boolean;
   finance_candidates?: number;
   finance_processed?: number;
-
+  escalation_enabled?: boolean;
+escalation_candidates?: number;
+escalation_processed?: number;
   error_message?: string | null;
 };
 
@@ -74,7 +77,9 @@ type AutomationSettings = {
 
   finance_reminder_enabled: boolean;
   finance_follow_up_days: number;
-
+  manager_escalation_enabled: boolean;
+document_escalation_days: number;
+finance_escalation_days: number;
   business_hours_enabled: boolean;
   business_day_start: string;
   business_day_end: string;
@@ -190,7 +195,20 @@ const [
   financeFollowUpDays,
   setFinanceFollowUpDays,
 ] = useState("3");
+const [
+  managerEscalationEnabled,
+  setManagerEscalationEnabled,
+] = useState(true);
 
+const [
+  documentEscalationDays,
+  setDocumentEscalationDays,
+] = useState("3");
+
+const [
+  financeEscalationDays,
+  setFinanceEscalationDays,
+] = useState("5");
 const [staleLeadEnabled, setStaleLeadEnabled] =
   useState(true);
 
@@ -232,7 +250,7 @@ const [timezoneName, setTimezoneName] =
   const { data, error } = await supabase
     .from("automation_settings")
     .select(
-  "id, company_id, stale_lead_enabled, stale_lead_days, whatsapp_sla_enabled, whatsapp_sla_minutes, document_reminder_enabled, document_reminder_delay_days, finance_reminder_enabled, finance_follow_up_days, business_hours_enabled, business_day_start, business_day_end, include_saturday, include_sunday, timezone_name, updated_by_id, updated_by_name, created_at, updated_at"
+  "id, company_id, stale_lead_enabled, stale_lead_days, whatsapp_sla_enabled, whatsapp_sla_minutes, document_reminder_enabled, document_reminder_delay_days, finance_reminder_enabled, finance_follow_up_days, manager_escalation_enabled, document_escalation_days, finance_escalation_days, business_hours_enabled, business_day_start, business_day_end, include_saturday, include_sunday, timezone_name, updated_by_id, updated_by_name, created_at, updated_at"
 )
     .eq("company_id", profile.company_id)
     .maybeSingle();
@@ -286,7 +304,17 @@ setFinanceReminderEnabled(
 setFinanceFollowUpDays(
   String(settings.finance_follow_up_days)
 );
+setManagerEscalationEnabled(
+  settings.manager_escalation_enabled
+);
 
+setDocumentEscalationDays(
+  String(settings.document_escalation_days)
+);
+
+setFinanceEscalationDays(
+  String(settings.finance_escalation_days)
+);
   setBusinessHoursEnabled(
     settings.business_hours_enabled
   );
@@ -317,8 +345,8 @@ setFinanceFollowUpDays(
 
     const { data, error } = await supabase
       .from("automation_runs")
-      .select(
-  "id, company_id, run_source, status, stale_threshold_days, whatsapp_sla_minutes, stale_candidate_count, stale_processed_count, whatsapp_candidate_count, whatsapp_processed_count, document_candidate_count, document_processed_count, finance_candidate_count, finance_processed_count, error_message, started_at, completed_at"
+     .select(
+  "id, company_id, run_source, status, stale_threshold_days, whatsapp_sla_minutes, stale_candidate_count, stale_processed_count, whatsapp_candidate_count, whatsapp_processed_count, document_candidate_count, document_processed_count, finance_candidate_count, finance_processed_count, escalation_candidate_count, escalation_processed_count, error_message, started_at, completed_at"
 )
       .eq("company_id", profile.company_id)
       .order("started_at", { ascending: false })
@@ -405,6 +433,13 @@ setFinanceFollowUpDays(
 const financeFollowUpNumber = Number(
   financeFollowUpDays
 );
+const documentEscalationNumber = Number(
+  documentEscalationDays
+);
+
+const financeEscalationNumber = Number(
+  financeEscalationDays
+);
   if (
     !Number.isInteger(staleDaysNumber) ||
     staleDaysNumber < 1 ||
@@ -447,6 +482,27 @@ if (
   );
   return;
 }
+if (
+  !Number.isInteger(documentEscalationNumber) ||
+  documentEscalationNumber < 1 ||
+  documentEscalationNumber > 365
+) {
+  alert(
+    "Document escalation threshold must be between 1 and 365 days."
+  );
+  return;
+}
+
+if (
+  !Number.isInteger(financeEscalationNumber) ||
+  financeEscalationNumber < 1 ||
+  financeEscalationNumber > 365
+) {
+  alert(
+    "Finance escalation threshold must be between 1 and 365 days."
+  );
+  return;
+}
   if (
     businessHoursEnabled &&
     businessDayEnd <= businessDayStart
@@ -478,6 +534,14 @@ finance_reminder_enabled:
 
 finance_follow_up_days:
   financeFollowUpNumber,
+  manager_escalation_enabled:
+  managerEscalationEnabled,
+
+document_escalation_days:
+  documentEscalationNumber,
+
+finance_escalation_days:
+  financeEscalationNumber,
     business_hours_enabled: businessHoursEnabled,
     business_day_start: businessDayStart,
     business_day_end: businessDayEnd,
@@ -500,7 +564,7 @@ finance_follow_up_days:
       onConflict: "company_id",
     })
     .select(
-  "id, company_id, stale_lead_enabled, stale_lead_days, whatsapp_sla_enabled, whatsapp_sla_minutes, document_reminder_enabled, document_reminder_delay_days, finance_reminder_enabled, finance_follow_up_days, business_hours_enabled, business_day_start, business_day_end, include_saturday, include_sunday, timezone_name, updated_by_id, updated_by_name, created_at, updated_at"
+  "id, company_id, stale_lead_enabled, stale_lead_days, whatsapp_sla_enabled, whatsapp_sla_minutes, document_reminder_enabled, document_reminder_delay_days, finance_reminder_enabled, finance_follow_up_days, manager_escalation_enabled, document_escalation_days, finance_escalation_days, business_hours_enabled, business_day_start, business_day_end, include_saturday, include_sunday, timezone_name, updated_by_id, updated_by_name, created_at, updated_at"
 )
     .single();
 
@@ -548,7 +612,17 @@ setFinanceReminderEnabled(
 setFinanceFollowUpDays(
   String(savedSettings.finance_follow_up_days)
 );
+setManagerEscalationEnabled(
+  savedSettings.manager_escalation_enabled
+);
 
+setDocumentEscalationDays(
+  String(savedSettings.document_escalation_days)
+);
+
+setFinanceEscalationDays(
+  String(savedSettings.finance_escalation_days)
+);
 setBusinessHoursEnabled(
   savedSettings.business_hours_enabled
 );
@@ -588,7 +662,8 @@ alert("Automation settings saved successfully.");
   !automationSettings.stale_lead_enabled &&
   !automationSettings.whatsapp_sla_enabled &&
   !automationSettings.document_reminder_enabled &&
-  !automationSettings.finance_reminder_enabled
+  !automationSettings.finance_reminder_enabled &&
+  !automationSettings.manager_escalation_enabled
 ) {
   alert(
     "At least one automation rule must be enabled."
@@ -612,6 +687,9 @@ alert("Automation settings saved successfully.");
   automationSettings.finance_reminder_enabled
     ? `Finance follow-up after ${automationSettings.finance_follow_up_days} days`
     : null,
+    automationSettings.manager_escalation_enabled
+  ? `Manager escalation: documents after ${automationSettings.document_escalation_days} days, finance after ${automationSettings.finance_escalation_days} days`
+  : null,
 ]
   .filter(Boolean)
   .join("\n");
@@ -783,6 +861,15 @@ const totalFinanceProcessed = runs.reduce(
     ),
   0
 );
+
+const totalEscalationProcessed = runs.reduce(
+  (sum, run) =>
+    sum +
+    Number(
+      run.escalation_processed_count || 0
+    ),
+  0
+);
   return (
     <DashboardLayout>
       <PageAccessGuard module="automations">
@@ -867,6 +954,11 @@ const totalFinanceProcessed = runs.reduce(
   value={totalFinanceProcessed}
   color="blue"
 />
+<MetricCard
+  label="Escalations Processed"
+  value={totalEscalationProcessed}
+  color="red"
+/>
           </div>
 
          <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
@@ -939,9 +1031,9 @@ const totalFinanceProcessed = runs.reduce(
           </div>
 
           <div className="mt-5">
-  <label className="text-sm font-semibold text-slate-700">
-    Inactivity Threshold
-  </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Inactivity Threshold
+          </label>
 
   <div className="mt-1 flex items-center gap-3">
     <input
@@ -1166,6 +1258,106 @@ const totalFinanceProcessed = runs.reduce(
       </span>
     </div>
   </div>
+</div>
+
+<div className="rounded-xl border border-slate-200 p-5 md:col-span-2">
+  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div>
+      <h3 className="font-bold text-slate-900">
+        Manager Escalations
+      </h3>
+
+      <p className="mt-1 text-sm text-slate-500">
+        Escalate overdue document and finance reminder tasks
+        to an active Manager, with Admin as fallback.
+      </p>
+    </div>
+
+    <label className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={managerEscalationEnabled}
+        onChange={(event) =>
+          setManagerEscalationEnabled(
+            event.target.checked
+          )
+        }
+        className="h-5 w-5"
+      />
+
+      <span className="text-sm font-semibold text-slate-700">
+        Enabled
+      </span>
+    </label>
+  </div>
+
+  <div className="mt-5 grid gap-4 md:grid-cols-2">
+    <div>
+      <label className="text-sm font-semibold text-slate-700">
+        Document Escalation
+      </label>
+
+      <div className="mt-1 flex items-center gap-3">
+        <input
+          type="number"
+          min="1"
+          max="365"
+          step="1"
+          value={documentEscalationDays}
+          onChange={(event) =>
+            setDocumentEscalationDays(
+              event.target.value
+            )
+          }
+          disabled={!managerEscalationEnabled}
+          className="w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100 disabled:text-slate-400"
+        />
+
+        <span className="text-sm text-slate-500">
+          days
+        </span>
+      </div>
+    </div>
+
+    <div>
+      <label className="text-sm font-semibold text-slate-700">
+        Finance Escalation
+      </label>
+
+      <div className="mt-1 flex items-center gap-3">
+        <input
+          type="number"
+          min="1"
+          max="365"
+          step="1"
+          value={financeEscalationDays}
+          onChange={(event) =>
+            setFinanceEscalationDays(
+              event.target.value
+            )
+          }
+          disabled={!managerEscalationEnabled}
+          className="w-full rounded-xl border border-slate-300 p-3 disabled:bg-slate-100 disabled:text-slate-400"
+        />
+
+        <span className="text-sm text-slate-500">
+          days
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <p
+    className={`mt-3 text-xs font-semibold ${
+      managerEscalationEnabled
+        ? "text-green-600"
+        : "text-slate-400"
+    }`}
+  >
+    {managerEscalationEnabled
+      ? "Manager escalation rule enabled"
+      : "Manager escalation rule disabled"}
+  </p>
 </div>
       </div>
 
@@ -1584,6 +1776,29 @@ using the saved company settings.
   }
 />
 
+<ResultItem
+  label="Escalation Rule"
+  value={
+    lastManualResult.escalation_enabled
+      ? "Enabled"
+      : "Disabled"
+  }
+/>
+
+<ResultItem
+  label="Escalation Candidates"
+  value={
+    lastManualResult.escalation_candidates || 0
+  }
+/>
+
+<ResultItem
+  label="Escalation Processed"
+  value={
+    lastManualResult.escalation_processed || 0
+  }
+/>
+
                   </div>
                 </div>
               )}
@@ -1737,7 +1952,7 @@ using the saved company settings.
                   Loading automation runs...
                 </div>
               ) : (
-                <table className="min-w-[1800px]">
+                <table className="min-w-[2050px]">
                   <thead className="bg-slate-50">
                     <tr>
                       <TableHeading>Run</TableHeading>
@@ -1782,7 +1997,13 @@ using the saved company settings.
 <TableHeading>
   Finance Processed
 </TableHeading>
-                      <TableHeading>Error</TableHeading>
+<TableHeading>
+  Escalation Candidates
+</TableHeading>
+
+<TableHeading>
+  Escalation Processed
+</TableHeading>                      <TableHeading>Error</TableHeading>
                     </tr>
                   </thead>
 
@@ -1863,6 +2084,13 @@ using the saved company settings.
 <TableCell>
   {run.finance_processed_count}
 </TableCell>
+<TableCell>
+  {run.escalation_candidate_count}
+</TableCell>
+
+<TableCell>
+  {run.escalation_processed_count}
+</TableCell>
                         <TableCell>
                           {run.error_message || "-"}
                         </TableCell>
@@ -1872,7 +2100,7 @@ using the saved company settings.
                     {filteredRuns.length === 0 && (
                       <tr>
                         <td
-                          colSpan={16}
+                          colSpan={18}
                           className="px-4 py-10 text-center text-slate-500"
                         >
                           No automation runs found.
