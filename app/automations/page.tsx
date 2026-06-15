@@ -866,9 +866,11 @@ const [timezoneName, setTimezoneName] =
             </h3>
 
             <p className="mt-1 text-sm text-slate-500">
-              Store the company operating schedule for
-              business-hour-aware SLA calculations.
-            </p>
+            When enabled, WhatsApp waiting time counts only
+            during the selected operating hours and working
+            days. Overnight periods and excluded weekends do
+            not count toward the SLA.
+             </p>
           </div>
 
           <label className="flex items-center gap-2">
@@ -984,19 +986,37 @@ const [timezoneName, setTimezoneName] =
           </div>
         </div>
       </div>
+      {businessHoursEnabled && (
+  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+    <p className="text-sm font-semibold text-blue-800">
+      Business-hours SLA is active
+    </p>
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={saveAutomationSettings}
-          disabled={savingSettings}
-          className="rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
-        >
-          {savingSettings
-            ? "Saving Settings..."
-            : "Save Automation Settings"}
-        </button>
-      </div>
+    <p className="mt-1 text-sm text-blue-700">
+      WhatsApp SLA time will count from{" "}
+      {businessDayStart} to {businessDayEnd} in the{" "}
+      {timezoneName} timezone.
+      {!includeSaturday &&
+        " Saturdays are excluded."}
+      {!includeSunday &&
+        " Sundays are excluded."}
+    </p>
+  </div>
+)}
+
+<div className="flex justify-end">
+  <button
+    type="button"
+    onClick={saveAutomationSettings}
+    disabled={savingSettings}
+    className="rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+  >
+    {savingSettings
+      ? "Saving Settings..."
+      : "Save Automation Settings"}
+  </button>
+</div>
+      
     </div>
   )}
 </div> 
