@@ -1,5 +1,7 @@
 "use client";
 import PageAccessGuard from "@/components/PageAccessGuard";
+import ReadOnlyNotice from "@/components/ReadOnlyNotice";
+import WriteAccessGuard from "@/components/WriteAccessGuard";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -91,6 +93,18 @@ type Activity = {
   description: string | null;
   activity_type: string | null;
   color: string | null;
+  created_at: string | null;
+};
+
+type DealChecklistItem = {
+  id: number;
+  company_id: number;
+  deal_id: number;
+  title: string;
+  category: string | null;
+  is_completed: boolean | null;
+  completed_at: string | null;
+  display_order: number | null;
   created_at: string | null;
 };
 
@@ -221,6 +235,27 @@ function calculateNetDealValue(deal: Deal) {
   return sale + extras - discount - tradeIn + settlement;
 }
 
+function normalizePhoneForMatching(
+  value: string | null | undefined
+) {
+  if (!value) return "";
+
+  let cleaned = value.replace(/\D/g, "");
+
+  if (cleaned.startsWith("0")) {
+    cleaned = `27${cleaned.slice(1)}`;
+  }
+
+  if (
+    cleaned.length === 9 &&
+    !cleaned.startsWith("27")
+  ) {
+    cleaned = `27${cleaned}`;
+  }
+
+  return cleaned;
+}
+
 export default function CustomerDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -238,14 +273,316 @@ export default function CustomerDetailPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [financeApplication, setFinanceApplication] =
     useState<FinanceApplication | null>(null);
+  const [dealChecklistItems, setDealChecklistItems] =
+    useState<DealChecklistItem[]>([]);
+  const [loadingDealChecklist, setLoadingDealChecklist] =
+    useState(false);
 
   const [loading, setLoading] = useState(true);
+  const [showEditModal, setShowEditModal] =
+  useState(false);
+
+const [savingCustomer, setSavingCustomer] =
+  useState(false);
+
+const [editCustomerName, setEditCustomerName] =
+  useState("");
+
+const [editPhone, setEditPhone] =
+  useState("");
+
+const [editEmail, setEditEmail] =
+  useState("");
+
+const [editBudget, setEditBudget] =
+  useState("");
+
+const [editSource, setEditSource] =
+  useState("");
+
+const [editVehicle, setEditVehicle] =
+  useState("");
 
   const totalDealValue = useMemo(() => {
     return deals.reduce((sum, deal) => sum + calculateNetDealValue(deal), 0);
   }, [deals]);
 
   const openTasks = tasks.filter((task) => task.status !== "Completed").length;
+
+
+  function openEditCustomerModal() {
+  if (!customer) return;
+
+  setEditCustomerName(
+    customer.customer || ""
+  );
+
+  setEditPhone(
+    customer.phone || ""
+  );
+
+  setEditEmail(
+    customer.email || ""
+  );
+
+  setEditBudget(
+    customer.budget || ""
+  );
+
+  setEditSource(
+    customer.source || ""
+  );
+
+  setEditVehicle(
+    customer.vehicle || ""
+  );
+
+  setShowEditModal(true);
+}
+
+  async function saveCustomerChanges() {
+  if (
+    !customer ||
+    !profile?.company_id ||
+    !profile?.id
+  ) {
+    return;
+  }
+
+  const customerName =
+    editCustomerName.trim();
+
+  const phone =
+    editPhone.trim();
+
+  const email =
+    editEmail.trim();
+
+  const budget =
+    editBudget.trim();
+
+  const source =
+    editSource.trim();
+
+  const vehicle =
+    editVehicle.trim();
+
+  if (!customerName) {
+    alert("Customer name is required.");
+    return;
+  }
+
+  if (email && !email.includes("@")) {
+    alert(
+      "Please enter a valid email address."
+    );
+    return;
+  }
+
+
+
+  const newPhone =
+    normalizePhoneForMatching(phone);
+
+  const changes: string[] = [];
+
+  if (customer.customer !== customerName) {
+    changes.push(
+      `Name changed from "${
+        customer.customer || "-"
+      }" to "${customerName}"`
+    );
+  }
+
+  if ((customer.phone || "") !== phone) {
+    changes.push(
+      `Phone changed from "${
+        customer.phone || "-"
+      }" to "${phone || "-"}"`
+    );
+  }
+
+  if ((customer.email || "") !== email) {
+    changes.push(
+      `Email changed from "${
+        customer.email || "-"
+      }" to "${email || "-"}"`
+    );
+  }
+
+  if ((customer.budget || "") !== budget) {
+    changes.push(
+      `Budget changed from "${
+        customer.budget || "-"
+      }" to "${budget || "-"}"`
+    );
+  }
+
+  if ((customer.source || "") !== source) {
+    changes.push(
+      `Source changed from "${
+        customer.source || "-"
+      }" to "${source || "-"}"`
+    );
+  }
+
+  if ((customer.vehicle || "") !== vehicle) {
+    changes.push(
+      `Vehicle interest changed from "${
+        customer.vehicle || "-"
+      }" to "${vehicle || "-"}"`
+    );
+  }
+
+  if (changes.length === 0) {
+    alert("No customer changes were made.");
+    return;
+  }
+
+  setSavingCustomer(true);
+
+  try {
+    const { error: leadError } =
+      await supabase
+        .from("leads")
+        .update({
+          customer: customerName,
+          phone: phone || null,
+          email: email || null,
+          budget: budget || null,
+          source: source || null,
+          vehicle: vehicle || null,
+        })
+        .eq("id", customer.id)
+        .eq(
+          "company_id",
+          profile.company_id
+        );
+
+    if (leadError) {
+      alert(
+        "Error updating customer: " +
+          leadError.message
+      );
+      return;
+    }
+
+    /*
+     * Keep the existing WhatsApp conversation matched
+     * to the updated customer details.
+     */
+    const { error: conversationError } =
+      await supabase
+        .from("whatsapp_conversations")
+        .update({
+          customer_name: customerName,
+          customer_phone:
+            newPhone || null,
+        })
+        .eq(
+          "company_id",
+          profile.company_id
+        )
+        .eq("lead_id", customer.id);
+
+    if (conversationError) {
+      console.error(
+        "Customer updated, but WhatsApp conversation could not be refreshed:",
+        conversationError.message
+      );
+    }
+
+    /*
+     * Keep documents readable under the updated
+     * customer name.
+     */
+    const { error: documentError } =
+      await supabase
+        .from("finance_documents")
+        .update({
+          customer_name: customerName,
+        })
+        .eq(
+          "company_id",
+          profile.company_id
+        )
+        .eq("lead_id", customer.id);
+
+    if (documentError) {
+      console.error(
+        "Customer updated, but finance document names could not be refreshed:",
+        documentError.message
+      );
+    }
+
+    const { error: activityError } =
+      await supabase
+        .from("lead_activities")
+        .insert({
+          company_id:
+            profile.company_id,
+
+          lead_id:
+            customer.id,
+
+          title:
+            "Customer Details Updated",
+
+          description:
+            changes.join(" • "),
+
+          activity_type:
+            "customer_update",
+
+          color:
+            "blue",
+        });
+
+    if (activityError) {
+      console.error(
+        "Customer updated, but the activity entry could not be saved:",
+        activityError.message
+      );
+    }
+
+    setCustomer((current) =>
+      current
+        ? {
+            ...current,
+            customer: customerName,
+            phone: phone || null,
+            email: email || null,
+            budget: budget || null,
+            source: source || null,
+            vehicle: vehicle || null,
+          }
+        : current
+    );
+
+    setShowEditModal(false);
+
+    await Promise.all([
+      fetchCustomer(),
+      fetchActivities(),
+      fetchDocuments(),
+    ]);
+
+    alert(
+      "Customer details updated successfully."
+    );
+  } catch (error) {
+    console.error(
+      "Unexpected customer update error:",
+      error
+    );
+
+    alert(
+      "Unexpected error updating customer."
+    );
+  } finally {
+    setSavingCustomer(false);
+  }
+}
 
   async function fetchCustomer() {
     if (!profile?.company_id || !customerLeadId) return;
@@ -377,6 +714,41 @@ export default function CustomerDetailPage() {
     setActivities(Array.isArray(data) ? data : []);
   }
 
+  async function fetchLatestDealChecklist(
+    dealId: number | null
+  ) {
+    if (!profile?.company_id || !dealId) {
+      setDealChecklistItems([]);
+      return;
+    }
+
+    setLoadingDealChecklist(true);
+
+    const { data, error } = await supabase
+      .from("deal_checklist_items")
+      .select(
+        "id, company_id, deal_id, title, category, is_completed, completed_at, display_order, created_at"
+      )
+      .eq("company_id", profile.company_id)
+      .eq("deal_id", dealId)
+      .order("display_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error(
+        "Error loading customer delivery checklist:",
+        error.message
+      );
+      setDealChecklistItems([]);
+    } else {
+      setDealChecklistItems(
+        Array.isArray(data) ? data : []
+      );
+    }
+
+    setLoadingDealChecklist(false);
+  }
+
   async function fetchFinanceApplication() {
     if (!profile?.company_id || !customerLeadId) return;
 
@@ -405,6 +777,41 @@ export default function CustomerDetailPage() {
     fetchActivities();
     fetchFinanceApplication();
   }, [profile?.company_id, profile?.role, profile?.id, customerLeadId]);
+
+  useEffect(() => {
+    const latestDeal = deals[0] || null;
+    void fetchLatestDealChecklist(latestDeal?.id || null);
+  }, [deals, profile?.company_id]);
+
+  const latestDeal = deals[0] || null;
+
+  const completedChecklistItems =
+    dealChecklistItems.filter(
+      (item) => item.is_completed
+    ).length;
+
+  const outstandingChecklistItems =
+    dealChecklistItems.filter(
+      (item) => !item.is_completed
+    );
+
+  const checklistProgress =
+    dealChecklistItems.length > 0
+      ? Math.round(
+          (completedChecklistItems /
+            dealChecklistItems.length) *
+            100
+        )
+      : 0;
+
+  const deliveryReadiness =
+    !latestDeal
+      ? "No Deal"
+      : dealChecklistItems.length === 0
+      ? "Checklist Not Started"
+      : checklistProgress === 100
+      ? "Ready"
+      : "In Progress";
 
   if (loading) {
     return (
@@ -442,6 +849,7 @@ export default function CustomerDetailPage() {
 return (
   <DashboardLayout>
     <PageAccessGuard module="customers">
+      <ReadOnlyNotice />
       <div className="space-y-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -480,6 +888,17 @@ return (
           </div>
 
           <div className="flex flex-wrap gap-3">
+            
+            <WriteAccessGuard>
+  <button
+    type="button"
+    onClick={openEditCustomerModal}
+    className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+  >
+    Edit Customer
+  </button>
+</WriteAccessGuard>
+            
             <Link
               href={`/leads/${customer.id}`}
               className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
@@ -742,6 +1161,143 @@ return (
             </div>
 
             <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Delivery Checklist
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Delivery readiness for the latest customer Deal.
+                  </p>
+                </div>
+
+                {latestDeal && (
+                  <Link
+                    href={`/deals/${latestDeal.id}`}
+                    className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                  >
+                    Open Deal
+                  </Link>
+                )}
+              </div>
+
+              {!latestDeal ? (
+                <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                  <p className="text-sm font-semibold text-slate-700">
+                    No Deal available
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Create a Deal before tracking delivery readiness.
+                  </p>
+                </div>
+              ) : loadingDealChecklist ? (
+                <p className="mt-5 text-sm text-slate-500">
+                  Loading delivery checklist...
+                </p>
+              ) : (
+                <>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Deal
+                      </p>
+                      <p className="mt-1 font-bold text-slate-900">
+                        #{latestDeal.id}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Completed
+                      </p>
+                      <p className="mt-1 font-bold text-green-700">
+                        {completedChecklistItems} / {dealChecklistItems.length}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Readiness
+                      </p>
+                      <p className={`mt-1 font-bold ${
+                        deliveryReadiness === "Ready"
+                          ? "text-green-700"
+                          : deliveryReadiness === "In Progress"
+                          ? "text-orange-700"
+                          : "text-slate-600"
+                      }`}>
+                        {deliveryReadiness}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-semibold text-slate-700">
+                        Progress
+                      </span>
+                      <span className="font-bold text-slate-900">
+                        {checklistProgress}%
+                      </span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className="h-full rounded-full bg-green-500 transition-all"
+                        style={{ width: `${checklistProgress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {dealChecklistItems.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                      <p className="text-sm font-semibold text-slate-700">
+                        Checklist not started
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Open the Deal to initialise the delivery checklist.
+                      </p>
+                    </div>
+                  ) : outstandingChecklistItems.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
+                      <p className="font-semibold text-green-800">
+                        All delivery checklist items are complete.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-4">
+                      <p className="text-sm font-semibold text-slate-700">
+                        Outstanding items
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {outstandingChecklistItems
+                          .slice(0, 4)
+                          .map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between gap-3 rounded-xl bg-orange-50 px-3 py-2"
+                            >
+                              <span className="text-sm font-medium text-orange-900">
+                                {item.title}
+                              </span>
+                              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-orange-700">
+                                {item.category || "Delivery"}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+
+                      {outstandingChecklistItems.length > 4 && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          +{outstandingChecklistItems.length - 4} more outstanding item(s)
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
               <h2 className="text-lg font-bold text-slate-900">
                 Follow-Up Tasks
               </h2>
@@ -920,6 +1476,197 @@ return (
           </div>
         </div>
       </div>
+
+{showEditModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">
+            Edit Customer Details
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Update the customer and current sales opportunity
+            information.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setShowEditModal(false)
+          }
+          disabled={savingCustomer}
+          className="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-100"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="text-sm font-semibold text-slate-700">
+            Customer Name
+          </label>
+
+          <input
+            type="text"
+            value={editCustomerName}
+            onChange={(event) =>
+              setEditCustomerName(
+                event.target.value
+              )
+            }
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-slate-700">
+            Phone
+          </label>
+
+          <input
+            type="tel"
+            value={editPhone}
+            onChange={(event) =>
+              setEditPhone(
+                event.target.value
+              )
+            }
+            placeholder="0821234567"
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          />
+
+          <p className="mt-1 text-xs text-slate-500">
+            Changing this also updates the linked WhatsApp
+            conversation.
+          </p>
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-slate-700">
+            Email
+          </label>
+
+          <input
+            type="email"
+            value={editEmail}
+            onChange={(event) =>
+              setEditEmail(
+                event.target.value
+              )
+            }
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-slate-700">
+            Budget
+          </label>
+
+          <input
+            type="text"
+            value={editBudget}
+            onChange={(event) =>
+              setEditBudget(
+                event.target.value
+              )
+            }
+            placeholder="Example: R8,500 per month"
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-slate-700">
+            Lead Source
+          </label>
+
+          <select
+            value={editSource}
+            onChange={(event) =>
+              setEditSource(
+                event.target.value
+              )
+            }
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          >
+            <option value="">
+              Select source...
+            </option>
+            <option value="Walk-in">
+              Walk-in
+            </option>
+            <option value="Website">
+              Website
+            </option>
+            <option value="Facebook">
+              Facebook
+            </option>
+            <option value="WhatsApp">
+              WhatsApp
+            </option>
+            <option value="Referral">
+              Referral
+            </option>
+            <option value="Phone">
+              Phone
+            </option>
+            <option value="Other">
+              Other
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-slate-700">
+            Vehicle Interest
+          </label>
+
+          <input
+            type="text"
+            value={editVehicle}
+            onChange={(event) =>
+              setEditVehicle(
+                event.target.value
+              )
+            }
+            placeholder="Example: 2024 Toyota Corolla"
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() =>
+            setShowEditModal(false)
+          }
+          disabled={savingCustomer}
+          className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={saveCustomerChanges}
+          disabled={savingCustomer}
+          className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+        >
+          {savingCustomer
+            ? "Saving..."
+            : "Save Changes"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
           </PageAccessGuard>
 
     </DashboardLayout>

@@ -17,6 +17,7 @@ type Task = {
   lead_id: number | null;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
+  customer_name?: string | null;
 };
 
 type Lead = {
@@ -104,7 +105,51 @@ export default function Home() {
       return;
     }
 
-    setTasks(Array.isArray(data) ? data : []);
+    const baseTasks = Array.isArray(data)
+      ? (data as Task[])
+      : [];
+
+    const leadIds = Array.from(
+      new Set(
+        baseTasks
+          .map((task) => task.lead_id)
+          .filter((leadId): leadId is number => Boolean(leadId))
+      )
+    );
+
+    let customerMap = new Map<number, string>();
+
+    if (leadIds.length > 0) {
+      const { data: leadData, error: leadError } =
+        await supabase
+          .from("leads")
+          .select("id, customer")
+          .eq("company_id", profile.company_id)
+          .in("id", leadIds);
+
+      if (leadError) {
+        console.error(
+          "Error loading dashboard task customers:",
+          leadError.message
+        );
+      } else {
+        customerMap = new Map(
+          (leadData || []).map((lead: any) => [
+            Number(lead.id),
+            lead.customer || "Unknown Customer",
+          ])
+        );
+      }
+    }
+
+    setTasks(
+      baseTasks.map((task) => ({
+        ...task,
+        customer_name: task.lead_id
+          ? customerMap.get(task.lead_id) || null
+          : null,
+      }))
+    );
   }
 
   async function fetchDashboardData() {
@@ -350,6 +395,11 @@ export default function Home() {
                           {task.title || "Untitled Task"}
                         </p>
 
+                        <p className="mt-1 text-sm font-bold text-blue-800">
+                          {task.customer_name ||
+                            "General / Unlinked"}
+                        </p>
+
                         <p className="mt-1 text-sm opacity-80">
                           {task.task_type || "Task"} •{" "}
                           {task.assigned_user_name || "Unassigned"}
@@ -396,14 +446,14 @@ export default function Home() {
 
                       {task.lead_id ? (
                         <Link
-                          href={`/leads/${task.lead_id}`}
+                          href={`/tasks?taskId=${task.id}`}
                           className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
                         >
                           Open Lead
                         </Link>
                       ) : (
                         <Link
-                          href="/tasks"
+                          href={`/tasks?taskId=${task.id}`}
                           className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
                         >
                           Open Task
@@ -493,7 +543,7 @@ export default function Home() {
 
                         {task.lead_id && (
                           <Link
-                            href={`/leads/${task.lead_id}`}
+                            href={`/tasks?taskId=${task.id}`}
                             className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
                           >
                             Open Lead

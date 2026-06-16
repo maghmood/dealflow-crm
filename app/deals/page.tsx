@@ -5,6 +5,8 @@ import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
+import ReadOnlyNotice from "@/components/ReadOnlyNotice";
+import WriteAccessGuard from "@/components/WriteAccessGuard";
 
 type Deal = {
   id: number;
@@ -353,7 +355,7 @@ export default function DealsPage() {
   }
 
   async function saveDeal() {
-    if (!profile?.company_id) return;
+    if (!profile?.company_id || !profile?.id) return;
 
     if (!form.customer_name.trim()) {
       alert("Please enter or select a customer.");
@@ -365,81 +367,221 @@ export default function DealsPage() {
       return;
     }
 
+    const selectedLead = form.lead_id
+      ? leads.find(
+          (lead) =>
+            lead.id === Number(form.lead_id)
+        )
+      : null;
+
+    if (!editingDeal && selectedLead) {
+      const activeStages = [
+        "Draft",
+        "Offer Sent",
+        "Finance Submitted",
+        "Finance Approved",
+        "Ready for Delivery",
+      ];
+
+      const {
+        data: duplicateDeal,
+        error: duplicateError,
+      } = await supabase
+        .from("deals")
+        .select("id, deal_stage")
+        .eq("company_id", profile.company_id)
+        .eq("lead_id", selectedLead.id)
+        .in("deal_stage", activeStages)
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(1)
+        .maybeSingle();
+
+      if (duplicateError) {
+        alert(
+          "Could not check for an existing deal: " +
+            duplicateError.message
+        );
+        return;
+      }
+
+      if (duplicateDeal) {
+        alert(
+          `This lead already has active Deal #${duplicateDeal.id}. Open and update that Deal instead of creating a duplicate.`
+        );
+        return;
+      }
+    }
+
     setSaving(true);
 
     const payload = {
       company_id: profile.company_id,
-      lead_id: form.lead_id ? Number(form.lead_id) : null,
-      vehicle_id: form.vehicle_id ? Number(form.vehicle_id) : null,
-      customer_name: form.customer_name.trim(),
-      vehicle_name: form.vehicle_name.trim(),
-      deal_stage: form.deal_stage || "Draft",
-      finance_status: form.finance_status || "Not Started",
-      sale_price: form.sale_price ? Number(form.sale_price) : null,
+      lead_id: form.lead_id
+        ? Number(form.lead_id)
+        : null,
+      vehicle_id: form.vehicle_id
+        ? Number(form.vehicle_id)
+        : null,
+      customer_name:
+        form.customer_name.trim(),
+      vehicle_name:
+        form.vehicle_name.trim(),
+      deal_stage:
+        form.deal_stage || "Draft",
+      finance_status:
+        form.finance_status ||
+        "Not Started",
+      sale_price: form.sale_price
+        ? Number(form.sale_price)
+        : null,
       deposit_amount: form.deposit_amount
         ? Number(form.deposit_amount)
         : null,
-      trade_in_value: form.trade_in_value
-        ? Number(form.trade_in_value)
-        : null,
-      settlement_amount: form.settlement_amount
-        ? Number(form.settlement_amount)
-        : null,
-      extras_amount: form.extras_amount ? Number(form.extras_amount) : null,
-      discount_amount: form.discount_amount
-        ? Number(form.discount_amount)
-        : null,
-      assigned_user_id: profile.id || null,
+      trade_in_value:
+        form.trade_in_value
+          ? Number(form.trade_in_value)
+          : null,
+      settlement_amount:
+        form.settlement_amount
+          ? Number(form.settlement_amount)
+          : null,
+      extras_amount:
+        form.extras_amount
+          ? Number(form.extras_amount)
+          : null,
+      discount_amount:
+        form.discount_amount
+          ? Number(form.discount_amount)
+          : null,
+      assigned_user_id:
+        selectedLead?.assigned_user_id ||
+        editingDeal?.assigned_user_id ||
+        profile.id,
       notes: form.notes.trim() || null,
-      updated_at: new Date().toISOString(),
+      updated_at:
+        new Date().toISOString(),
     };
 
-    if (editingDeal) {
-      const { error } = await supabase
-        .from("deals")
-        .update(payload)
-        .eq("id", editingDeal.id)
-        .eq("company_id", profile.company_id);
+    try {
+      let savedDealId: number;
 
-      if (error) {
-        alert("Error updating deal: " + error.message);
-        setSaving(false);
-        return;
+      if (editingDeal) {
+        const { data, error } = await supabase
+          .from("deals")
+          .update(payload)
+          .eq("id", editingDeal.id)
+          .eq(
+            "company_id",
+            profile.company_id
+          )
+          .select("id")
+          .single();
+
+        if (error || !data) {
+          alert(
+            "Error updating deal: " +
+              (error?.message ||
+                "Unknown error")
+          );
+          return;
+        }
+
+        savedDealId = data.id;
+
+        await addLeadActivity(
+          payload.lead_id,
+          "Deal Updated",
+          `Deal #${savedDealId} for ${payload.vehicle_name} was updated. Stage: ${payload.deal_stage}. Finance: ${payload.finance_status}.`,
+          "blue"
+        );
+      } else {
+        const { data, error } = await supabase
+          .from("deals")
+          .insert(payload)
+          .select("id")
+          .single();
+
+        if (error || !data) {
+          alert(
+            "Error creating deal: " +
+              (error?.message ||
+                "Unknown error")
+          );
+          return;
+        }
+
+        savedDealId = data.id;
+
+        await addLeadActivity(
+          payload.lead_id,
+          "Deal Created",
+          `Deal #${savedDealId} was created for ${payload.vehicle_name}. Stage: ${payload.deal_stage}.`,
+          "green"
+        );
       }
 
-      await addLeadActivity(
-        payload.lead_id,
-        "Deal Updated",
-        `Deal for ${payload.vehicle_name} was updated. Stage: ${payload.deal_stage}. Finance: ${payload.finance_status}.`,
-        "blue"
-      );
-    } else {
-      const { data, error } = await supabase
-        .from("deals")
-        .insert(payload)
-        .select()
-        .single();
+      if (payload.vehicle_id) {
+        const selectedVehicle =
+          vehicles.find(
+            (vehicle) =>
+              vehicle.id ===
+              payload.vehicle_id
+          );
 
-      if (error) {
-        alert("Error creating deal: " + error.message);
-        setSaving(false);
-        return;
+        const { error: vehicleError } =
+          await supabase
+            .from("inventory_vehicles")
+            .update({
+              linked_lead_id:
+                payload.lead_id,
+              linked_customer_name:
+                payload.customer_name,
+              status:
+                selectedVehicle?.status ===
+                  "Sold" ||
+                selectedVehicle?.status ===
+                  "Delivered"
+                  ? selectedVehicle.status
+                  : "Reserved",
+            })
+            .eq(
+              "id",
+              payload.vehicle_id
+            )
+            .eq(
+              "company_id",
+              profile.company_id
+            );
+
+        if (vehicleError) {
+          console.error(
+            "Deal saved, but vehicle reservation could not be updated:",
+            vehicleError.message
+          );
+        }
       }
 
-      await addLeadActivity(
-        payload.lead_id,
-        "Deal Created",
-        `Deal #${data?.id || ""} was created for ${payload.vehicle_name}. Stage: ${payload.deal_stage}.`,
-        "green"
+      const wasEditing = Boolean(editingDeal);
+
+      setShowModal(false);
+      setEditingDeal(null);
+      setForm(emptyForm());
+
+      await Promise.all([
+        fetchDeals(),
+        fetchVehicles(),
+      ]);
+
+      alert(
+        wasEditing
+          ? `Deal #${savedDealId} updated successfully.`
+          : `Deal #${savedDealId} created successfully.`
       );
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
-    setShowModal(false);
-    setEditingDeal(null);
-    setForm(emptyForm());
-
-    await fetchDeals();
   }
 
   const filteredDeals = useMemo(() => {
@@ -497,6 +639,7 @@ export default function DealsPage() {
   return (
   <DashboardLayout>
     <PageAccessGuard module="deals">
+      <ReadOnlyNotice />
       <div className="space-y-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -512,12 +655,14 @@ export default function DealsPage() {
             </p>
           </div>
 
-          <button
-            onClick={openCreateModal}
-            className="rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-          >
-            + Create Deal
-          </button>
+          <WriteAccessGuard>
+            <button
+              onClick={openCreateModal}
+              className="rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+            >
+              + Create Deal
+            </button>
+          </WriteAccessGuard>
         </div>
 
         <div
@@ -577,12 +722,14 @@ export default function DealsPage() {
             <p className="mt-2 text-slate-500">
               Create your first deal to start tracking sales transactions.
             </p>
-            <button
-              onClick={openCreateModal}
-              className="mt-5 rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
-            >
-              + Create Deal
-            </button>
+            <WriteAccessGuard>
+              <button
+                onClick={openCreateModal}
+                className="mt-5 rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
+              >
+                + Create Deal
+              </button>
+            </WriteAccessGuard>
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
@@ -676,12 +823,14 @@ export default function DealsPage() {
     View
   </Link>
 
-  <button
-    onClick={() => openEditModal(deal)}
-    className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-  >
-    Edit
-  </button>
+  <WriteAccessGuard>
+    <button
+      onClick={() => openEditModal(deal)}
+      className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+    >
+      Edit
+    </button>
+  </WriteAccessGuard>
 </div>
               </div>
             ))}

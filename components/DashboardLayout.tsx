@@ -55,7 +55,10 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile } = useAuth();
+  const {
+  profile,
+  loading: authLoading,
+} = useAuth();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -152,6 +155,18 @@ export default function DashboardLayout({
     );
   }
 
+  if (profile.role === "Finance") {
+    taskQuery = taskQuery
+      .eq("assigned_user_id", profile.id)
+      .eq("task_scope", "Finance");
+
+    /*
+     * Finance does not use the general WhatsApp Inbox.
+     * Force an empty WhatsApp result for this role.
+     */
+    whatsappQuery = whatsappQuery.eq("id", -1);
+  }
+
   const [taskResult, whatsappResult] = await Promise.all([
     taskQuery,
     whatsappQuery,
@@ -167,9 +182,41 @@ export default function DashboardLayout({
   } else {
     const now = new Date();
 
-    const taskItems: NotificationItem[] = (
-      taskResult.data || []
-    )
+    const taskRows = taskResult.data || [];
+    const taskLeadIds = Array.from(
+      new Set(
+        taskRows
+          .map((task: any) => task.lead_id)
+          .filter(Boolean)
+      )
+    ) as number[];
+
+    let taskCustomerMap = new Map<number, string>();
+
+    if (taskLeadIds.length > 0) {
+      const { data: taskLeadData, error: taskLeadError } =
+        await supabase
+          .from("leads")
+          .select("id, customer")
+          .eq("company_id", profile.company_id)
+          .in("id", taskLeadIds);
+
+      if (taskLeadError) {
+        console.error(
+          "Error loading notification customer names:",
+          taskLeadError.message
+        );
+      } else {
+        taskCustomerMap = new Map(
+          (taskLeadData || []).map((lead: any) => [
+            Number(lead.id),
+            lead.customer || "Unknown Customer",
+          ])
+        );
+      }
+    }
+
+    const taskItems: NotificationItem[] = taskRows
       .map((task: any) => {
         const dueDate = task.due_date
           ? new Date(task.due_date)
@@ -191,10 +238,10 @@ export default function DashboardLayout({
           title: isOverdue
             ? "Overdue Task"
             : "Task Due Today",
-          message: task.title,
-          href: task.lead_id
-            ? `/leads/${task.lead_id}`
-            : "/tasks",
+          message: task.lead_id
+            ? `${taskCustomerMap.get(task.lead_id) || "Customer"} • ${task.title}`
+            : `General Task • ${task.title}`,
+          href: `/tasks?taskId=${task.id}`,
           severity: isOverdue ? "red" : "orange",
           source: "task",
         } satisfies NotificationItem;
@@ -277,21 +324,73 @@ export default function DashboardLayout({
     fetchNotifications();
 
     function handleBrandingUpdated() {
-      fetchBranding();
+      void fetchBranding();
     }
 
-    window.addEventListener("dealflow-branding-updated", handleBrandingUpdated);
+    function handleTaskUpdated() {
+      void fetchNotifications();
+    }
+
+    window.addEventListener(
+      "dealflow-branding-updated",
+      handleBrandingUpdated
+    );
+
+    window.addEventListener(
+      "dealflow-task-updated",
+      handleTaskUpdated
+    );
 
     return () => {
       window.removeEventListener(
         "dealflow-branding-updated",
         handleBrandingUpdated
       );
+
+      window.removeEventListener(
+        "dealflow-task-updated",
+        handleTaskUpdated
+      );
     };
   }, [profile?.company_id, profile?.role, profile?.id]);
 
 useEffect(() => {
   if (!profile?.company_id) return;
+
+  const taskNotificationChannel = supabase
+    .channel(
+      `layout-task-notifications-${profile.company_id}-${profile.id}`
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "tasks",
+        filter: `company_id=eq.${profile.company_id}`,
+      },
+      () => {
+        void fetchNotifications();
+      }
+    )
+    .subscribe((status, error) => {
+      if (error) {
+        console.error(
+          "Task notification Realtime error:",
+          error
+        );
+      }
+
+      if (
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT"
+      ) {
+        console.error(
+          "Task notification channel status:",
+          status
+        );
+      }
+    });
 
   const whatsappNotificationChannel = supabase
     .channel(
@@ -329,6 +428,7 @@ useEffect(() => {
     });
 
   return () => {
+    supabase.removeChannel(taskNotificationChannel);
     supabase.removeChannel(whatsappNotificationChannel);
   };
 }, [
@@ -337,6 +437,38 @@ useEffect(() => {
   profile?.id,
 ]);
 
+  if (authLoading && !profile) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
+      <div className="rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
+        <h1 className="text-xl font-bold text-slate-900">
+          Checking your account
+        </h1>
+
+        <p className="mt-2 text-sm text-slate-500">
+          Please wait while DealFlow confirms your access.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+if (!profile || profile.status !== "Active") {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
+      <div className="rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
+        <h1 className="text-xl font-bold text-red-700">
+          Account unavailable
+        </h1>
+
+        <p className="mt-2 text-sm text-slate-500">
+          Your account is inactive or your session is no
+          longer valid.
+        </p>
+      </div>
+    </div>
+  );
+}
   const primaryColor = branding.primary_color || "#0f172a";
   const accentColor = branding.accent_color || "#2563eb";
   const sidebarColor = branding.sidebar_color || "#0f172a";

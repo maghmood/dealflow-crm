@@ -8,6 +8,11 @@ type AutomationRequestBody = {
   companyId?: number;
 };
 
+type RunSource =
+  | "Manual"
+  | "Vercel Cron"
+  | "API";
+
 function getBearerToken(request: Request) {
   const authorization =
     request.headers.get("authorization") || "";
@@ -26,10 +31,7 @@ async function runAutomations({
   runSource,
 }: {
   companyId: number;
-  runSource:
-    | "Manual"
-    | "Vercel Cron"
-    | "API";
+  runSource: RunSource;
 }) {
   const { data, error } = await supabaseAdmin.rpc(
     "run_company_automations_from_settings",
@@ -42,12 +44,16 @@ async function runAutomations({
   if (error) {
     console.error(
       "AUTOMATION_RUN_RPC_ERROR",
-      error
+      JSON.stringify({
+        companyId,
+        runSource,
+        error: error.message,
+      })
     );
 
     return {
       success: false,
-      status: 500,
+      companyId,
       error: error.message,
       data: null,
     };
@@ -59,12 +65,16 @@ async function runAutomations({
 
   console.log(
     "AUTOMATION_RUN_COMPLETED",
-    JSON.stringify(result)
+    JSON.stringify({
+      companyId,
+      runSource,
+      result,
+    })
   );
 
   return {
     success: true,
-    status: 200,
+    companyId,
     error: null,
     data: result,
   };
@@ -100,37 +110,97 @@ export async function GET(request: Request) {
     );
   }
 
-  const companyId = Number(
-    process.env.AUTOMATION_COMPANY_ID || "1"
-  );
+  /*
+   * Run every company that has automation settings.
+   * This replaces the previous single-company
+   * AUTOMATION_COMPANY_ID behaviour.
+   */
+  const {
+    data: settingsRows,
+    error: settingsError,
+  } = await supabaseAdmin
+    .from("company_automation_settings")
+    .select("company_id")
+    .order("company_id", {
+      ascending: true,
+    });
 
-  if (
-    !Number.isInteger(companyId) ||
-    companyId <= 0
-  ) {
+  if (settingsError) {
+    console.error(
+      "AUTOMATION_COMPANY_LOOKUP_ERROR",
+      settingsError
+    );
+
     return NextResponse.json(
       {
         success: false,
         error:
-          "Invalid AUTOMATION_COMPANY_ID.",
+          "Could not load companies configured for automation.",
       },
       { status: 500 }
     );
   }
 
-  const result = await runAutomations({
-    companyId,
-    runSource: "Vercel Cron",
-  });
+  const companyIds = Array.from(
+    new Set(
+      (settingsRows || [])
+        .map((row) => Number(row.company_id))
+        .filter(
+          (companyId) =>
+            Number.isInteger(companyId) &&
+            companyId > 0
+        )
+    )
+  );
+
+  if (companyIds.length === 0) {
+    return NextResponse.json({
+      success: true,
+      source: "Vercel Cron",
+      companyCount: 0,
+      successfulCompanies: 0,
+      failedCompanies: 0,
+      results: [],
+    });
+  }
+
+  const results = [];
+
+  /*
+   * Process sequentially so one company does not
+   * overload the database or prevent others from running.
+   */
+  for (const companyId of companyIds) {
+    results.push(
+      await runAutomations({
+        companyId,
+        runSource: "Vercel Cron",
+      })
+    );
+  }
+
+  const successfulCompanies = results.filter(
+    (result) => result.success
+  ).length;
+
+  const failedCompanies =
+    results.length - successfulCompanies;
 
   return NextResponse.json(
     {
-      success: result.success,
+      success: failedCompanies === 0,
       source: "Vercel Cron",
-      result: result.data,
-      error: result.error,
+      companyCount: results.length,
+      successfulCompanies,
+      failedCompanies,
+      results,
     },
-    { status: result.status }
+    {
+      status:
+        failedCompanies === results.length
+          ? 500
+          : 200,
+    }
   );
 }
 
@@ -251,6 +321,10 @@ export async function POST(request: Request) {
       result: result.data,
       error: result.error,
     },
-    { status: result.status }
+    {
+      status: result.success
+        ? 200
+        : 500,
+    }
   );
 }

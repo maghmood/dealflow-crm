@@ -137,6 +137,59 @@ type AffordabilityAssessment = {
   created_at: string;
 };
 
+type FinanceBankOffer = {
+  id: number;
+  finance_application_id: number;
+  bank_name: string;
+  status: "Submitted" | "Pending" | "Approved" | "Declined";
+  approved_amount: number | null;
+  interest_rate: number | null;
+  deposit_amount: number | null;
+  term_months: number | null;
+  balloon_percentage: number | null;
+  monthly_installment: number | null;
+  approval_expiry_date: string | null;
+  conditions: string | null;
+  notes: string | null;
+  response_date: string;
+  is_selected: boolean;
+  selected_at: string | null;
+  selected_by_name: string | null;
+};
+
+type DealChecklistItem = {
+  id: number;
+  company_id: number;
+  deal_id: number;
+  title: string;
+  category: string | null;
+  is_completed: boolean | null;
+  completed_at: string | null;
+  display_order: number | null;
+  created_at: string | null;
+};
+
+type LeadDealSnapshot = {
+  id: number;
+  lead_id: number | null;
+  vehicle_id: number | null;
+  customer_name: string | null;
+  vehicle_name: string | null;
+  sale_price: number | null;
+  deposit_amount: number | null;
+  trade_in_value: number | null;
+  settlement_amount: number | null;
+  extras_amount: number | null;
+  discount_amount: number | null;
+  deal_stage: string | null;
+  finance_status: string | null;
+  prep_started_at: string | null;
+  planned_delivery_at: string | null;
+  ready_for_delivery_at: string | null;
+  delivered_at: string | null;
+  created_at: string | null;
+};
+
 function formatRand(value: number | null | undefined) {
   if (!value && value !== 0) return "Not captured";
 
@@ -162,7 +215,9 @@ function vehicleStatusBadge(status: string | null) {
     Available: "bg-green-100 text-green-700",
     Reserved: "bg-orange-100 text-orange-700",
     Sold: "bg-slate-200 text-slate-700",
+    "Sale Pending": "bg-emerald-100 text-emerald-700",
     "In Prep": "bg-blue-100 text-blue-700",
+    "Ready for Delivery": "bg-purple-100 text-purple-700",
     Delivered: "bg-purple-100 text-purple-700",
     "On Hold": "bg-red-100 text-red-700",
   };
@@ -238,11 +293,47 @@ function calculateMaximumVehiclePrice(
   return (deposit + annuityPresentValue) / denominator;
 }
 
+function calculateDealFinanceAmount(
+  deal: LeadDealSnapshot
+) {
+  const salePrice =
+    Number(deal.sale_price) || 0;
+
+  const extras =
+    Number(deal.extras_amount) || 0;
+
+  const discount =
+    Number(deal.discount_amount) || 0;
+
+  const tradeIn =
+    Number(deal.trade_in_value) || 0;
+
+  const settlement =
+    Number(deal.settlement_amount) || 0;
+
+  const deposit =
+    Number(deal.deposit_amount) || 0;
+
+  const netDealValue =
+    salePrice +
+    extras -
+    discount -
+    tradeIn +
+    settlement;
+
+  return Math.max(
+    netDealValue - deposit,
+    0
+  );
+}
+
 export default function LeadDetailPage() {
   const params = useParams();
   const leadId = Number(params.id);
   const { profile } = useAuth();
-
+const canChooseTaskAssignee =
+  profile?.role === "Admin" ||
+  profile?.role === "Manager";
   const whatsappSectionRef = useRef<HTMLDivElement | null>(null);
   const whatsappInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -254,6 +345,27 @@ export default function LeadDetailPage() {
   const [financeApplicationId, setFinanceApplicationId] = useState<
     number | null
   >(null);
+  const [financeBankOffers, setFinanceBankOffers] = useState<FinanceBankOffer[]>([]);
+  const [loadingFinanceBankOffers, setLoadingFinanceBankOffers] = useState(false);
+  const [selectingFinanceOfferId, setSelectingFinanceOfferId] = useState<number | null>(null);
+
+  const [linkedDealSnapshot, setLinkedDealSnapshot] =
+    useState<LeadDealSnapshot | null>(null);
+  const [loadingLinkedDeal, setLoadingLinkedDeal] = useState(false);
+  const [dealChecklistItems, setDealChecklistItems] = useState<
+    DealChecklistItem[]
+  >([]);
+  const [loadingDealChecklist, setLoadingDealChecklist] = useState(false);
+  const [showDealModal, setShowDealModal] = useState(false);
+  const [savingDeal, setSavingDeal] = useState(false);
+  const [dealSalePrice, setDealSalePrice] = useState("");
+  const [dealDeposit, setDealDeposit] = useState("");
+  const [dealTradeIn, setDealTradeIn] = useState("");
+  const [dealSettlement, setDealSettlement] = useState("");
+  const [dealExtras, setDealExtras] = useState("");
+  const [dealDiscount, setDealDiscount] = useState("");
+  const [dealNotes, setDealNotes] = useState("");
+
   const [loading, setLoading] = useState(true);
 
   const [linkedVehicle, setLinkedVehicle] = useState<InventoryVehicle | null>(
@@ -473,7 +585,104 @@ function startCustomerCall() {
       return lastPart || "Document file";
     }
   }
+async function openSecureDocument(
+  documentId: number,
+  mode: "view" | "download"
+) {
+  /*
+   * Open the tab immediately while still inside the
+   * user's button click.
+   */
+  const documentWindow = window.open(
+    "about:blank",
+    "_blank"
+  );
 
+  if (!documentWindow) {
+    alert(
+      "The document window was blocked. Please allow pop-ups for DealFlow."
+    );
+    return;
+  }
+
+  /*
+   * Prevent the new tab from controlling the DealFlow tab.
+   */
+  documentWindow.opener = null;
+
+  documentWindow.document.title =
+    "Preparing document";
+
+  documentWindow.document.body.innerHTML = `
+    <div style="
+      font-family: Arial, sans-serif;
+      padding: 40px;
+      color: #334155;
+    ">
+      <h2>Preparing secure document...</h2>
+      <p>Please wait while DealFlow opens the file.</p>
+    </div>
+  `;
+
+  try {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (
+      sessionError ||
+      !session?.access_token
+    ) {
+      documentWindow.close();
+
+      alert(
+        "Your login session has expired. Please sign in again."
+      );
+      return;
+    }
+
+    const response = await fetch(
+      `/api/documents/${documentId}/signed-url?mode=${mode}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization:
+            `Bearer ${session.access_token}`,
+        },
+      }
+    );
+
+    const result = await response.json();
+
+    if (
+      !response.ok ||
+      !result.signedUrl
+    ) {
+      documentWindow.close();
+
+      alert(
+        result.error ||
+          "The document could not be opened."
+      );
+      return;
+    }
+
+    documentWindow.location.href =
+      result.signedUrl;
+  } catch (error) {
+    documentWindow.close();
+
+    console.error(
+      "Unexpected secure document error:",
+      error
+    );
+
+    alert(
+      "Unexpected error opening the document."
+    );
+  }
+}
   async function fetchLeadTasks() {
     if (!profile?.company_id) return;
 
@@ -897,135 +1106,1024 @@ const response = await fetch("/api/whatsapp/send", {
   }
 }
 
-  async function submitToFinance() {
-    if (!lead) return;
 
-    const { data: existingApplication, error: checkError } = await supabase
-      .from("finance_applications")
-      .select("*")
-      .eq("lead_id", lead.id)
-      .eq("company_id", profile?.company_id)
+  async function fetchLinkedDealSnapshot() {
+    if (!profile?.company_id || !leadId) return;
+
+    setLoadingLinkedDeal(true);
+
+    const { data, error } = await supabase
+      .from("deals")
+      .select(
+        "id, lead_id, vehicle_id, customer_name, vehicle_name, sale_price, deposit_amount, trade_in_value, settlement_amount, extras_amount, discount_amount, deal_stage, finance_status, prep_started_at, planned_delivery_at, ready_for_delivery_at, delivered_at, created_at"
+      )
+      .eq("company_id", profile.company_id)
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
-    if (checkError) {
-      alert("Error checking finance application: " + checkError.message);
+    if (error) {
+      console.error("Error loading linked deal:", error.message);
+      setLinkedDealSnapshot(null);
+    } else {
+      setLinkedDealSnapshot(
+        (data as LeadDealSnapshot | null) || null
+      );
+    }
+
+    setLoadingLinkedDeal(false);
+  }
+
+  async function fetchDealChecklist(
+    dealId: number
+  ) {
+    if (!profile?.company_id || !dealId) {
+      setDealChecklistItems([]);
       return;
     }
 
-    if (existingApplication) {
-      alert("This lead has already been submitted to finance.");
+    setLoadingDealChecklist(true);
+
+    const { data, error } = await supabase
+      .from("deal_checklist_items")
+      .select(
+        "id, company_id, deal_id, title, category, is_completed, completed_at, display_order, created_at"
+      )
+      .eq("company_id", profile.company_id)
+      .eq("deal_id", dealId)
+      .order("display_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error(
+        "Error loading deal checklist on lead:",
+        error.message
+      );
+      setDealChecklistItems([]);
+    } else {
+      setDealChecklistItems(
+        Array.isArray(data) ? data : []
+      );
+    }
+
+    setLoadingDealChecklist(false);
+  }
+
+  function openDealModal() {
+    if (!lead) return;
+
+    const latestAssessment =
+      affordabilityAssessments[0] || null;
+
+    setDealSalePrice(
+      linkedDealSnapshot?.sale_price !== null &&
+      linkedDealSnapshot?.sale_price !== undefined
+        ? String(linkedDealSnapshot.sale_price)
+        : latestAssessment?.selected_vehicle_price !== null &&
+          latestAssessment?.selected_vehicle_price !== undefined
+        ? String(latestAssessment.selected_vehicle_price)
+        : linkedVehicle?.price !== null &&
+          linkedVehicle?.price !== undefined
+        ? String(linkedVehicle.price)
+        : vehiclePrice || ""
+    );
+
+    setDealDeposit(
+      linkedDealSnapshot?.deposit_amount !== null &&
+      linkedDealSnapshot?.deposit_amount !== undefined
+        ? String(linkedDealSnapshot.deposit_amount)
+        : latestAssessment
+        ? String(latestAssessment.deposit_amount)
+        : deposit || ""
+    );
+
+    setDealTradeIn(
+      linkedDealSnapshot?.trade_in_value !== null &&
+      linkedDealSnapshot?.trade_in_value !== undefined
+        ? String(linkedDealSnapshot.trade_in_value)
+        : ""
+    );
+
+    setDealSettlement(
+      linkedDealSnapshot?.settlement_amount !== null &&
+      linkedDealSnapshot?.settlement_amount !== undefined
+        ? String(linkedDealSnapshot.settlement_amount)
+        : ""
+    );
+
+    setDealExtras(
+      linkedDealSnapshot?.extras_amount !== null &&
+      linkedDealSnapshot?.extras_amount !== undefined
+        ? String(linkedDealSnapshot.extras_amount)
+        : ""
+    );
+
+    setDealDiscount(
+      linkedDealSnapshot?.discount_amount !== null &&
+      linkedDealSnapshot?.discount_amount !== undefined
+        ? String(linkedDealSnapshot.discount_amount)
+        : ""
+    );
+
+    setDealNotes(
+      linkedDealSnapshot
+        ? ""
+        : latestAssessment?.notes || ""
+    );
+
+    setShowDealModal(true);
+  }
+
+  async function reserveDealVehicle(
+    vehicleId: number | null
+  ) {
+    if (
+      !vehicleId ||
+      !profile?.company_id ||
+      !lead
+    ) {
       return;
     }
 
-    const { error: financeError } = await supabase
-      .from("finance_applications")
-      .insert({
+    const { error } = await supabase
+      .from("inventory_vehicles")
+      .update({
+        linked_lead_id: lead.id,
+        linked_customer_name: lead.customer,
+        status:
+          linkedVehicle?.status === "Sold" ||
+          linkedVehicle?.status === "Delivered"
+            ? linkedVehicle.status
+            : "Reserved",
+      })
+      .eq("id", vehicleId)
+      .eq("company_id", profile.company_id);
+
+    if (error) {
+      console.error(
+        "Deal saved, but vehicle reservation could not be updated:",
+        error.message
+      );
+    }
+  }
+
+  async function saveDealFromLead() {
+    if (
+      !lead ||
+      !profile?.company_id ||
+      !profile?.id
+    ) {
+      return;
+    }
+
+    const salePrice = Number(dealSalePrice) || 0;
+
+    if (salePrice <= 0) {
+      alert("Please enter a valid sale price.");
+      return;
+    }
+
+    const vehicleId =
+      linkedVehicle?.id ||
+      affordabilityAssessments[0]
+        ?.selected_vehicle_id ||
+      linkedDealSnapshot?.vehicle_id ||
+      null;
+
+    const vehicleName =
+      linkedVehicle
+        ? formatVehicleTitle(linkedVehicle)
+        : lead.vehicle ||
+          linkedDealSnapshot?.vehicle_name ||
+          "Vehicle not selected";
+
+    setSavingDeal(true);
+
+    try {
+      const activeStages = [
+        "Draft",
+        "Offer Sent",
+        "Finance Submitted",
+        "Finance Approved",
+        "Sale Pending",
+        "Ready for Delivery",
+      ];
+
+      const { data: existingActiveDeal, error: lookupError } =
+        await supabase
+          .from("deals")
+          .select(
+            "id, deal_stage, finance_status, notes"
+          )
+          .eq("company_id", profile.company_id)
+          .eq("lead_id", lead.id)
+          .in("deal_stage", activeStages)
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(1)
+          .maybeSingle();
+
+      if (lookupError) {
+        alert(
+          "Could not check for an existing deal: " +
+            lookupError.message
+        );
+        return;
+      }
+
+      const latestAssessment =
+        affordabilityAssessments[0] || null;
+
+      const noteParts = [
+        existingActiveDeal?.notes || null,
+        dealNotes.trim() || null,
+        latestAssessment
+          ? `Latest affordability assessment #${latestAssessment.id}`
+          : null,
+      ].filter(Boolean);
+
+      const payload = {
+        company_id: profile.company_id,
         lead_id: lead.id,
-        customer: lead.customer,
-        vehicle: lead.vehicle,
-        requested_amount: 0,
-        deposit: 0,
-        monthly_budget: 0,
-        finance_status: "Submitted",
-        bank: "Pending bank allocation",
-        company_id: profile?.company_id,
-        finance_notes: "Finance application submitted from lead detail page.",
-      });
+        vehicle_id: vehicleId,
+        customer_name: lead.customer,
+        vehicle_name: vehicleName,
+        sale_price: salePrice,
+        deposit_amount:
+          Number(dealDeposit) || 0,
+        trade_in_value:
+          Number(dealTradeIn) || 0,
+        settlement_amount:
+          Number(dealSettlement) || 0,
+        extras_amount:
+          Number(dealExtras) || 0,
+        discount_amount:
+          Number(dealDiscount) || 0,
+        assigned_user_id:
+          lead.assigned_user_id ||
+          profile.id,
+        notes:
+          noteParts.join(" • ") || null,
+        updated_at:
+          new Date().toISOString(),
+      };
 
-    if (financeError) {
-      alert("Error submitting to finance: " + financeError.message);
+      let savedDealId: number;
+      let actionTitle: string;
+
+      if (existingActiveDeal) {
+        const { data, error } = await supabase
+          .from("deals")
+          .update(payload)
+          .eq("id", existingActiveDeal.id)
+          .eq("company_id", profile.company_id)
+          .select("id")
+          .single();
+
+        if (error || !data) {
+          alert(
+            "Error updating deal: " +
+              (error?.message ||
+                "Unknown error")
+          );
+          return;
+        }
+
+        savedDealId = data.id;
+        actionTitle = "Deal Updated";
+      } else {
+        const financeStatus =
+          lead.finance === "Approved"
+            ? "Approved"
+            : lead.finance === "Submitted" ||
+              financeApplicationId
+            ? "Submitted"
+            : "Not Started";
+
+        const dealStage =
+          financeStatus === "Approved"
+            ? "Finance Approved"
+            : financeStatus === "Submitted"
+            ? "Finance Submitted"
+            : "Draft";
+
+        const { data, error } = await supabase
+          .from("deals")
+          .insert({
+            ...payload,
+            deal_stage: dealStage,
+            finance_status: financeStatus,
+          })
+          .select("id")
+          .single();
+
+        if (error || !data) {
+          alert(
+            "Error creating deal: " +
+              (error?.message ||
+                "Unknown error")
+          );
+          return;
+        }
+
+        savedDealId = data.id;
+        actionTitle = "Deal Created";
+      }
+
+      await reserveDealVehicle(vehicleId);
+
+      await addActivity(
+        actionTitle,
+        [
+          `Deal #${savedDealId}`,
+          vehicleName,
+          `Sale price: ${formatRand(
+            salePrice
+          )}`,
+          `Deposit: ${formatRand(
+            Number(dealDeposit) || 0
+          )}`,
+          latestAssessment
+            ? `Assessment #${latestAssessment.id}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" • "),
+        "deal",
+        existingActiveDeal
+          ? "blue"
+          : "green"
+      );
+
+      setShowDealModal(false);
+      await fetchLinkedDealSnapshot();
+
+      alert(
+        existingActiveDeal
+          ? `Deal #${savedDealId} updated successfully.`
+          : `Draft Deal #${savedDealId} created successfully.`
+      );
+    } finally {
+      setSavingDeal(false);
+    }
+  }
+
+  async function createOrUpdateDealFromAssessment(
+    assessment: AffordabilityAssessment
+  ) {
+    if (
+      !lead ||
+      !profile?.company_id ||
+      !profile?.id
+    ) {
       return;
     }
 
-    const { error: leadError } = await supabase
+    const confirmed = window.confirm(
+      linkedDealSnapshot
+        ? "The assessment was saved. Update the current active Deal with these affordability values?"
+        : "The assessment was saved. Create a Draft Deal from this assessment?"
+    );
+
+    if (!confirmed) return;
+
+    const activeStages = [
+      "Draft",
+      "Offer Sent",
+      "Finance Submitted",
+      "Finance Approved",
+      "Ready for Delivery",
+    ];
+
+    const { data: existingActiveDeal, error: lookupError } =
+      await supabase
+        .from("deals")
+        .select("id, notes")
+        .eq("company_id", profile.company_id)
+        .eq("lead_id", lead.id)
+        .in("deal_stage", activeStages)
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(1)
+        .maybeSingle();
+
+    if (lookupError) {
+      alert(
+        "Assessment saved, but Deal lookup failed: " +
+          lookupError.message
+      );
+      return;
+    }
+
+    const vehicleId =
+      assessment.selected_vehicle_id ||
+      linkedVehicle?.id ||
+      null;
+
+    const vehicleName =
+      linkedVehicle
+        ? formatVehicleTitle(linkedVehicle)
+        : lead.vehicle ||
+          "Vehicle not selected";
+
+    const salePrice =
+      Number(
+        assessment.selected_vehicle_price
+      ) ||
+      Number(linkedVehicle?.price) ||
+      Number(vehiclePrice) ||
+      0;
+
+    if (salePrice <= 0) {
+      alert(
+        "Assessment saved, but a Deal could not be created because no valid vehicle price is available."
+      );
+      return;
+    }
+
+    const commonPayload = {
+      company_id: profile.company_id,
+      lead_id: lead.id,
+      vehicle_id: vehicleId,
+      customer_name: lead.customer,
+      vehicle_name: vehicleName,
+      sale_price: salePrice,
+      deposit_amount:
+        Number(
+          assessment.deposit_amount
+        ) || 0,
+      assigned_user_id:
+        lead.assigned_user_id ||
+        profile.id,
+      updated_at:
+        new Date().toISOString(),
+    };
+
+    let savedDealId: number;
+    let actionTitle: string;
+
+    if (existingActiveDeal) {
+      const notes = [
+        existingActiveDeal.notes || null,
+        `Updated from affordability assessment #${assessment.id}`,
+        assessment.notes || null,
+      ]
+        .filter(Boolean)
+        .join(" • ");
+
+      const { data, error } = await supabase
+        .from("deals")
+        .update({
+          ...commonPayload,
+          notes,
+        })
+        .eq("id", existingActiveDeal.id)
+        .eq("company_id", profile.company_id)
+        .select("id")
+        .single();
+
+      if (error || !data) {
+        alert(
+          "Assessment saved, but Deal update failed: " +
+            (error?.message ||
+              "Unknown error")
+        );
+        return;
+      }
+
+      savedDealId = data.id;
+      actionTitle = "Deal Updated from Assessment";
+    } else {
+      const financeStatus =
+        lead.finance === "Approved"
+          ? "Approved"
+          : lead.finance === "Submitted" ||
+            financeApplicationId
+          ? "Submitted"
+          : "Not Started";
+
+      const dealStage =
+        financeStatus === "Approved"
+          ? "Finance Approved"
+          : financeStatus === "Submitted"
+          ? "Finance Submitted"
+          : "Draft";
+
+      const { data, error } = await supabase
+        .from("deals")
+        .insert({
+          ...commonPayload,
+          deal_stage: dealStage,
+          finance_status: financeStatus,
+          trade_in_value: 0,
+          settlement_amount: 0,
+          extras_amount: 0,
+          discount_amount: 0,
+          notes: [
+            `Created from affordability assessment #${assessment.id}`,
+            assessment.notes || null,
+          ]
+            .filter(Boolean)
+            .join(" • "),
+        })
+        .select("id")
+        .single();
+
+      if (error || !data) {
+        alert(
+          "Assessment saved, but Draft Deal creation failed: " +
+            (error?.message ||
+              "Unknown error")
+        );
+        return;
+      }
+
+      savedDealId = data.id;
+      actionTitle = "Draft Deal Created from Assessment";
+    }
+
+    await reserveDealVehicle(vehicleId);
+
+    await addActivity(
+      actionTitle,
+      [
+        `Deal #${savedDealId}`,
+        `Assessment #${assessment.id}`,
+        vehicleName,
+        `Sale price: ${formatRand(
+          salePrice
+        )}`,
+        `Deposit: ${formatRand(
+          assessment.deposit_amount
+        )}`,
+      ].join(" • "),
+      "deal",
+      existingActiveDeal
+        ? "blue"
+        : "green"
+    );
+
+    await fetchLinkedDealSnapshot();
+
+    alert(
+      existingActiveDeal
+        ? `Deal #${savedDealId} updated from the assessment.`
+        : `Draft Deal #${savedDealId} created from the assessment.`
+    );
+  }
+
+  async function submitToFinance() {
+  if (
+    !lead ||
+    !profile?.company_id ||
+    !profile?.id
+  ) {
+    return;
+  }
+
+  const {
+    data: existingApplication,
+    error: checkError,
+  } = await supabase
+    .from("finance_applications")
+    .select("id")
+    .eq("lead_id", lead.id)
+    .eq(
+      "company_id",
+      profile.company_id
+    )
+    .maybeSingle();
+
+  if (checkError) {
+    alert(
+      "Error checking finance application: " +
+        checkError.message
+    );
+    return;
+  }
+
+  if (existingApplication) {
+    alert(
+      "This lead has already been submitted to finance."
+    );
+    return;
+  }
+
+  /*
+   * Load the latest saved assessment.
+   */
+  const {
+    data: latestAssessment,
+    error: assessmentError,
+  } = await supabase
+    .from("lead_affordability_assessments")
+    .select(
+      "id, target_monthly_installment, deposit_amount, maximum_vehicle_price, selected_vehicle_id, selected_vehicle_price, estimated_installment, created_at"
+    )
+    .eq(
+      "company_id",
+      profile.company_id
+    )
+    .eq("lead_id", lead.id)
+    .order("created_at", {
+      ascending: false,
+    })
+    .limit(1)
+    .maybeSingle();
+
+  if (assessmentError) {
+    alert(
+      "Could not load the latest affordability assessment: " +
+        assessmentError.message
+    );
+    return;
+  }
+
+  /*
+   * Load the latest linked deal.
+   */
+  const {
+    data: latestDeal,
+    error: dealError,
+  } = await supabase
+    .from("deals")
+    .select(
+      "id, lead_id, vehicle_id, customer_name, vehicle_name, sale_price, deposit_amount, trade_in_value, settlement_amount, extras_amount, discount_amount, deal_stage, finance_status, created_at"
+    )
+    .eq(
+      "company_id",
+      profile.company_id
+    )
+    .eq("lead_id", lead.id)
+    .order("created_at", {
+      ascending: false,
+    })
+    .limit(1)
+    .maybeSingle();
+
+  if (dealError) {
+    alert(
+      "Could not load the linked deal: " +
+        dealError.message
+    );
+    return;
+  }
+
+  /*
+   * Prefer Deal values.
+   * Fall back to the assessment when no Deal exists.
+   */
+  const dealSnapshot =
+    latestDeal as LeadDealSnapshot | null;
+
+  const requestedAmount =
+    dealSnapshot
+      ? calculateDealFinanceAmount(
+          dealSnapshot
+        )
+      : Math.max(
+          Number(
+            latestAssessment
+              ?.selected_vehicle_price
+          ) -
+            Number(
+              latestAssessment
+                ?.deposit_amount
+            ),
+          0
+        );
+
+  const submissionDeposit =
+    dealSnapshot
+      ? Number(
+          dealSnapshot.deposit_amount
+        ) || 0
+      : Number(
+          latestAssessment
+            ?.deposit_amount
+        ) || 0;
+
+  const monthlyBudget =
+    Number(
+      latestAssessment
+        ?.target_monthly_installment
+    ) || 0;
+
+  const submittedVehicle =
+    dealSnapshot?.vehicle_name ||
+    lead.vehicle ||
+    "Vehicle not selected";
+
+  const financeNotesParts = [
+    "Finance application submitted from lead detail page.",
+
+    latestAssessment?.id
+      ? `Assessment #${latestAssessment.id} used`
+      : "No affordability assessment found",
+
+    dealSnapshot?.id
+      ? `Deal #${dealSnapshot.id} used`
+      : "No linked deal found",
+
+    `Submitted by ${
+      profile.full_name ||
+      profile.email ||
+      "Unknown User"
+    }`,
+  ];
+
+  const {
+    data: createdApplication,
+    error: financeError,
+  } = await supabase
+    .from("finance_applications")
+    .insert({
+      lead_id: lead.id,
+      customer: lead.customer,
+      vehicle: submittedVehicle,
+
+      requested_amount:
+        requestedAmount,
+
+      deposit:
+        submissionDeposit,
+
+      monthly_budget:
+        monthlyBudget,
+
+      finance_status:
+        "Submitted",
+
+      bank:
+        "Pending bank allocation",
+
+      company_id:
+        profile.company_id,
+
+      finance_notes:
+        financeNotesParts.join(" • "),
+
+      submitted_at:
+        new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (
+    financeError ||
+    !createdApplication
+  ) {
+    alert(
+      "Error submitting to finance: " +
+        (
+          financeError?.message ||
+          "Unknown error"
+        )
+    );
+    return;
+  }
+
+  const { error: leadError } =
+    await supabase
       .from("leads")
       .update({
         finance: "Submitted",
-        status: "Submitted to Finance",
+        status:
+          "Submitted to Finance",
       })
-      .eq("id", leadId)
-      .eq("company_id", profile?.company_id);
+      .eq("id", lead.id)
+      .eq(
+        "company_id",
+        profile.company_id
+      );
 
-    if (leadError) {
-      alert("Finance submitted, but lead update failed: " + leadError.message);
-      return;
-    }
-
-    await addActivity(
-      "Submitted to Finance",
-      "Lead was submitted to the finance department for review.",
-      "Finance",
-      "orange"
+  if (leadError) {
+    alert(
+      "Finance application was created, but the lead could not be updated: " +
+        leadError.message
     );
-
-    setLead((currentLead) =>
-      currentLead
-        ? {
-            ...currentLead,
-            finance: "Submitted",
-            status: "Submitted to Finance",
-          }
-        : currentLead
-    );
-
-    setLeadStatus("Submitted to Finance");
-    alert("Lead submitted to finance successfully.");
-
-    fetchLead();
-    fetchActivities();
-    checkFinanceApplication();
+    return;
   }
+
+  if (dealSnapshot?.id) {
+    const { error: dealUpdateError } =
+      await supabase
+        .from("deals")
+        .update({
+          deal_stage:
+            "Finance Submitted",
+
+          finance_status:
+            "Submitted",
+
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq(
+          "id",
+          dealSnapshot.id
+        )
+        .eq(
+          "company_id",
+          profile.company_id
+        );
+
+    if (dealUpdateError) {
+      console.error(
+        "Finance submitted, but linked deal could not be updated:",
+        dealUpdateError.message
+      );
+    }
+  }
+
+  await addActivity(
+    "Submitted to Finance",
+    [
+      `Requested amount: ${formatRand(
+        requestedAmount
+      )}`,
+
+      `Deposit: ${formatRand(
+        submissionDeposit
+      )}`,
+
+      `Monthly budget: ${formatRand(
+        monthlyBudget
+      )}`,
+
+      latestAssessment?.id
+        ? `Assessment #${latestAssessment.id}`
+        : "No assessment",
+
+      dealSnapshot?.id
+        ? `Deal #${dealSnapshot.id}`
+        : "No deal",
+    ].join(" • "),
+    "Finance",
+    "orange"
+  );
+
+  setLead((currentLead) =>
+    currentLead
+      ? {
+          ...currentLead,
+          finance: "Submitted",
+          status:
+            "Submitted to Finance",
+        }
+      : currentLead
+  );
+
+  setLeadStatus(
+    "Submitted to Finance"
+  );
+
+  setFinanceApplicationId(
+    createdApplication.id
+  );
+
+  await Promise.all([
+    fetchLead(),
+    fetchActivities(),
+    checkFinanceApplication(),
+  ]);
+
+  alert(
+    "Lead submitted to finance successfully."
+  );
+}
 
   async function createTask() {
-    if (!lead || !profile?.company_id) return;
+  if (
+    !lead ||
+    !profile?.company_id ||
+    !profile?.id
+  ) {
+    return;
+  }
 
-    if (!taskTitle.trim() || !taskDueDate) {
-      alert("Please enter a task title and due date.");
+  if (!taskTitle.trim() || !taskDueDate) {
+    alert(
+      "Please enter a task title and due date."
+    );
+    return;
+  }
+
+  let assignedUserId: number;
+  let assignedUserName: string;
+
+  if (!canChooseTaskAssignee) {
+    assignedUserId = profile.id;
+
+    assignedUserName =
+      profile.full_name ||
+      profile.email ||
+      "Unknown User";
+  } else {
+    if (taskAssignedUserId === "") {
+      alert(
+        "Please select the person responsible for this task."
+      );
       return;
     }
 
-    const selectedUser =
-      salesUsers.find((user) => user.id === Number(taskAssignedUserId)) ||
-      salesUsers.find((user) => user.id === lead.assigned_user_id);
-
-    const { error } = await supabase.from("tasks").insert({
-      company_id: profile.company_id,
-      lead_id: lead.id,
-      assigned_user_id: selectedUser?.id || profile.id,
-      assigned_user_name:
-        selectedUser?.full_name || selectedUser?.email || profile.full_name,
-      title: taskTitle,
-      description: taskDescription,
-      task_type: "Follow-up",
-      status: "Open",
-      priority: taskPriority,
-      due_date: taskDueDate,
-      created_by_id: profile.id,
-      created_by_name: profile.full_name,
-    });
-
-    if (error) {
-      alert("Error creating task: " + error.message);
-      return;
-    }
-
-    await addActivity(
-      "Task Created",
-      `${taskTitle} • Due: ${new Date(taskDueDate).toLocaleString("en-ZA")}`,
-      "task",
-      "blue"
+    const selectedUser = salesUsers.find(
+      (user) =>
+        user.id === Number(taskAssignedUserId)
     );
 
-    setShowTaskModal(false);
-    setTaskTitle("");
-    setTaskDescription("");
-    setTaskDueDate("");
-    setTaskPriority("Medium");
-    setTaskAssignedUserId("");
-    fetchLeadTasks();
+    if (!selectedUser) {
+      alert(
+        "The selected user is not active or could not be found."
+      );
+      return;
+    }
 
-    alert("Task created successfully.");
+    assignedUserId = selectedUser.id;
+
+    assignedUserName =
+      selectedUser.full_name ||
+      selectedUser.email ||
+      "Unknown User";
   }
+
+  const { data, error } = await supabase.rpc(
+    "upsert_workflow_task",
+    {
+      p_lead_id: lead.id,
+      p_assigned_user_id: assignedUserId,
+      p_title: taskTitle.trim(),
+      p_description:
+        taskDescription.trim() || null,
+      p_task_type: "Follow-up",
+      p_priority: taskPriority,
+      p_due_date: new Date(
+        taskDueDate
+      ).toISOString(),
+      p_task_scope: "Sales",
+      p_task_reason:
+        "CUSTOMER_FOLLOW_UP",
+      p_related_record_type: "lead",
+      p_related_record_id: lead.id,
+      p_use_dedupe: true,
+    }
+  );
+
+  if (error) {
+    alert(
+      "Error saving task: " +
+        error.message
+    );
+    return;
+  }
+
+  const result = Array.isArray(data)
+    ? data[0]
+    : data;
+
+  const action =
+    result?.task_action || "saved";
+
+  await addActivity(
+    action === "created"
+      ? "Task Created"
+      : action === "reopened"
+      ? "Task Reopened"
+      : "Task Updated",
+    [
+      taskTitle.trim(),
+      `Assigned to: ${assignedUserName}`,
+      `Due: ${new Date(
+        taskDueDate
+      ).toLocaleString("en-ZA")}`,
+      `Lifecycle action: ${action}`,
+    ].join(" • "),
+    "task",
+    action === "created"
+      ? "blue"
+      : "orange"
+  );
+
+  setShowTaskModal(false);
+  setTaskTitle("");
+  setTaskDescription("");
+  setTaskDueDate("");
+  setTaskPriority("Medium");
+  setTaskAssignedUserId("");
+
+  await fetchLeadTasks();
+
+  alert(
+    action === "created"
+      ? `Task created and assigned to ${assignedUserName}.`
+      : action === "reopened"
+      ? `The existing customer follow-up task was reopened and updated for ${assignedUserName}.`
+      : `The existing customer follow-up task was updated for ${assignedUserName}.`
+  );
+}
 
 async function saveCallLog() {
   if (!lead || !profile?.company_id) return;
@@ -1035,105 +2133,208 @@ async function saveCallLog() {
     return;
   }
 
-  const followUpRequired = callOutcome === "Call Back Later";
+  const followUpRequired =
+    callOutcome === "Call Back Later";
 
-  if (followUpRequired && !callFollowUpDate) {
-    alert("Please select a callback date and time.");
+  if (
+    followUpRequired &&
+    !callFollowUpDate
+  ) {
+    alert(
+      "Please select a callback date and time."
+    );
     return;
   }
 
   setSavingCall(true);
 
   try {
-    const normalizedPhone = normalizePhone(lead.phone);
+    const normalizedPhone =
+      normalizePhone(lead.phone);
 
-    const { data: savedCall, error: callError } = await supabase
+    const {
+      data: savedCall,
+      error: callError,
+    } = await supabase
       .from("call_logs")
       .insert({
         company_id: profile.company_id,
         lead_id: lead.id,
         user_profile_id: profile.id,
-        user_name: profile.full_name || profile.email || "Unknown User",
-        phone_number: normalizedPhone ? `+${normalizedPhone}` : lead.phone,
+        user_name:
+          profile.full_name ||
+          profile.email ||
+          "Unknown User",
+        phone_number: normalizedPhone
+          ? `+${normalizedPhone}`
+          : lead.phone,
         direction: "Outbound",
         outcome: callOutcome,
-        notes: callNotes.trim() || null,
-        follow_up_required: followUpRequired,
+        notes:
+          callNotes.trim() || null,
+        follow_up_required:
+          followUpRequired,
         follow_up_date:
-          followUpRequired && callFollowUpDate
-            ? new Date(callFollowUpDate).toISOString()
+          followUpRequired &&
+          callFollowUpDate
+            ? new Date(
+                callFollowUpDate
+              ).toISOString()
             : null,
       })
       .select("id")
       .single();
 
-    if (callError || !savedCall) {
-      alert("Error saving call log: " + (callError?.message || "Unknown error"));
+    if (
+      callError ||
+      !savedCall
+    ) {
+      alert(
+        "Error saving call log: " +
+          (
+            callError?.message ||
+            "Unknown error"
+          )
+      );
       return;
     }
 
-    let followUpTaskId: number | null = null;
+    let followUpTaskId:
+      | number
+      | null = null;
 
-    if (followUpRequired && callFollowUpDate) {
-      const assignedUserId = lead.assigned_user_id || profile.id;
+    let taskLifecycleAction:
+      | string
+      | null = null;
+
+    if (
+      followUpRequired &&
+      callFollowUpDate
+    ) {
+      const assignedUserId =
+        lead.assigned_user_id ||
+        profile.id;
+
       const assignedUserName =
         lead.assigned_user_name ||
         profile.full_name ||
         profile.email ||
         "Unknown User";
 
-      const { data: savedTask, error: taskError } = await supabase
-        .from("tasks")
-        .insert({
-          company_id: profile.company_id,
-          lead_id: lead.id,
-          assigned_user_id: assignedUserId,
-          assigned_user_name: assignedUserName,
-          title: `Call back ${lead.customer}`,
-          description:
-            callNotes.trim() ||
-            `Callback requested after outbound call to ${lead.customer}.`,
-          task_type: "Follow-up",
-          status: "Open",
-          priority: "High",
-          due_date: new Date(callFollowUpDate).toISOString(),
-          created_by_id: profile.id,
-          created_by_name:
-            profile.full_name || profile.email || "Unknown User",
-        })
-        .select("id")
-        .single();
-
-      if (taskError) {
-        alert(
-          "Call log saved, but callback task could not be created: " +
-            taskError.message
+      const { data, error } =
+        await supabase.rpc(
+          "upsert_workflow_task",
+          {
+            p_lead_id: lead.id,
+            p_assigned_user_id:
+              assignedUserId,
+            p_title:
+              `Call back ${lead.customer}`,
+            p_description:
+              callNotes.trim() ||
+              `Callback requested after outbound call to ${lead.customer}.`,
+            p_task_type: "Follow-up",
+            p_priority: "High",
+            p_due_date: new Date(
+              callFollowUpDate
+            ).toISOString(),
+            p_task_scope: "Sales",
+            p_task_reason: "CALLBACK",
+            p_related_record_type:
+              "lead",
+            p_related_record_id:
+              lead.id,
+            p_use_dedupe: true,
+          }
         );
-      } else if (savedTask) {
-        followUpTaskId = savedTask.id;
 
-        const { error: linkError } = await supabase
-          .from("call_logs")
-          .update({
-            follow_up_task_id: followUpTaskId,
-          })
-          .eq("id", savedCall.id)
-          .eq("company_id", profile.company_id);
+      if (error) {
+        alert(
+          "Call log saved, but callback task could not be saved: " +
+            error.message
+        );
+      } else {
+        const result =
+          Array.isArray(data)
+            ? data[0]
+            : data;
 
-        if (linkError) {
-          console.error(
-            "Call saved, but task link could not be updated:",
-            linkError.message
-          );
+        followUpTaskId =
+          result?.task_id || null;
+
+        taskLifecycleAction =
+          result?.task_action ||
+          "saved";
+
+        if (followUpTaskId) {
+          const { error: linkError } =
+            await supabase
+              .from("call_logs")
+              .update({
+                follow_up_task_id:
+                  followUpTaskId,
+              })
+              .eq(
+                "id",
+                savedCall.id
+              )
+              .eq(
+                "company_id",
+                profile.company_id
+              );
+
+          if (linkError) {
+            console.error(
+              "Call saved, but task link could not be updated:",
+              linkError.message
+            );
+          }
         }
+      }
+    }
+
+    if (
+      callOutcome === "Answered"
+    ) {
+      const {
+        error: completionError,
+      } = await supabase.rpc(
+        "complete_workflow_task",
+        {
+          p_lead_id: lead.id,
+          p_task_scope: "Sales",
+          p_task_reason: "CALLBACK",
+          p_related_record_type:
+            "lead",
+          p_related_record_id:
+            lead.id,
+        }
+      );
+
+      if (completionError) {
+        console.error(
+          "Call logged, but existing callback task could not be completed:",
+          completionError.message
+        );
       }
     }
 
     const activityDescription = [
       `Outcome: ${callOutcome}`,
-      callNotes.trim() ? `Notes: ${callNotes.trim()}` : null,
-      followUpRequired && callFollowUpDate
-        ? `Callback: ${new Date(callFollowUpDate).toLocaleString("en-ZA")}`
+      callNotes.trim()
+        ? `Notes: ${callNotes.trim()}`
+        : null,
+      followUpRequired &&
+      callFollowUpDate
+        ? `Callback: ${new Date(
+            callFollowUpDate
+          ).toLocaleString("en-ZA")}`
+        : null,
+      taskLifecycleAction
+        ? `Callback task: ${taskLifecycleAction}`
+        : null,
+      callOutcome === "Answered"
+        ? "Existing callback task completed where applicable"
         : null,
     ]
       .filter(Boolean)
@@ -1143,13 +2344,21 @@ async function saveCallLog() {
       "Call Logged",
       activityDescription,
       "call",
-      callOutcome === "Answered" ? "green" : "orange"
+      callOutcome === "Answered"
+        ? "green"
+        : "orange"
     );
 
-await Promise.all([
-  fetchLeadTasks(),
-  fetchCallLogs(),
-]);
+    await Promise.all([
+      fetchLeadTasks(),
+      fetchCallLogs(),
+    ]);
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "dealflow-task-updated"
+      )
+    );
 
     setShowCallModal(false);
     setCallOutcome("");
@@ -1158,12 +2367,27 @@ await Promise.all([
 
     alert(
       followUpTaskId
-        ? "Call logged and callback task created successfully."
+        ? taskLifecycleAction ===
+          "created"
+          ? "Call logged and callback task created successfully."
+          : taskLifecycleAction ===
+            "reopened"
+          ? "Call logged and the existing callback task was reopened with the new date."
+          : "Call logged and the existing callback task was updated with the new date."
+        : callOutcome ===
+          "Answered"
+        ? "Call logged and any open callback task was completed."
         : "Call logged successfully."
     );
   } catch (error) {
-    console.error("Unexpected call log error:", error);
-    alert("Unexpected error saving the call log.");
+    console.error(
+      "Unexpected call log error:",
+      error
+    );
+
+    alert(
+      "Unexpected error saving the call log."
+    );
   } finally {
     setSavingCall(false);
   }
@@ -1269,6 +2493,10 @@ async function saveAffordabilityAssessment() {
     setAssessmentNotes("");
 
     alert("Affordability assessment saved successfully.");
+
+    await createOrUpdateDealFromAssessment(
+      savedAssessment as AffordabilityAssessment
+    );
   } catch (error) {
     console.error("Unexpected affordability save error:", error);
     alert("Unexpected error saving affordability assessment.");
@@ -1450,6 +2678,65 @@ async function fetchAffordabilityAssessments() {
     fetchActivities();
   }
 
+  async function fetchFinanceBankOffers(applicationId: number) {
+    if (!profile?.company_id) return;
+
+    setLoadingFinanceBankOffers(true);
+
+    const { data, error } = await supabase
+      .from("finance_bank_offers")
+      .select("id, finance_application_id, bank_name, status, approved_amount, interest_rate, deposit_amount, term_months, balloon_percentage, monthly_installment, approval_expiry_date, conditions, notes, response_date, is_selected, selected_at, selected_by_name")
+      .eq("company_id", profile.company_id)
+      .eq("finance_application_id", applicationId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading finance bank offers:", error.message);
+      setFinanceBankOffers([]);
+    } else {
+      setFinanceBankOffers(Array.isArray(data) ? data : []);
+    }
+
+    setLoadingFinanceBankOffers(false);
+  }
+
+  async function selectFinanceOfferForCustomer(
+    offer: FinanceBankOffer
+  ) {
+    const confirmed = window.confirm(
+      `Confirm that ${lead?.customer || "the customer"} selected the ${offer.bank_name} offer?`
+    );
+
+    if (!confirmed) return;
+
+    setSelectingFinanceOfferId(offer.id);
+
+    const { error } = await supabase.rpc(
+      "select_finance_bank_offer",
+      { p_offer_id: offer.id }
+    );
+
+    setSelectingFinanceOfferId(null);
+
+    if (error) {
+      alert("Could not select the finance offer: " + error.message);
+      return;
+    }
+
+    if (financeApplicationId) {
+      await fetchFinanceBankOffers(financeApplicationId);
+    }
+
+    await Promise.all([
+      fetchLinkedDealSnapshot(),
+      fetchLinkedInventoryVehicle(),
+    ]);
+
+    window.dispatchEvent(new CustomEvent("dealflow-task-updated"));
+
+    alert(`${offer.bank_name} was selected successfully.`);
+  }
+
   async function checkFinanceApplication() {
     const { data, error } = await supabase
       .from("finance_applications")
@@ -1578,7 +2865,54 @@ async function fetchAffordabilityAssessments() {
     fetchLinkedInventoryVehicle();
     fetchInventoryVehicles();
     fetchAffordabilityAssessments();
+    fetchLinkedDealSnapshot();
   }, [leadId, profile?.company_id]);
+
+  useEffect(() => {
+    if (!financeApplicationId || !profile?.company_id) {
+      setFinanceBankOffers([]);
+      return;
+    }
+
+    void fetchFinanceBankOffers(financeApplicationId);
+  }, [financeApplicationId, profile?.company_id]);
+
+  useEffect(() => {
+    if (!linkedDealSnapshot?.id || !profile?.company_id) {
+      setDealChecklistItems([]);
+      return;
+    }
+
+    void fetchDealChecklist(linkedDealSnapshot.id);
+  }, [linkedDealSnapshot?.id, profile?.company_id]);
+
+  const completedChecklistItems =
+    dealChecklistItems.filter(
+      (item) => item.is_completed
+    ).length;
+
+  const outstandingChecklistItems =
+    dealChecklistItems.filter(
+      (item) => !item.is_completed
+    );
+
+  const checklistProgress =
+    dealChecklistItems.length > 0
+      ? Math.round(
+          (completedChecklistItems /
+            dealChecklistItems.length) *
+            100
+        )
+      : 0;
+
+  const deliveryReadiness =
+    !linkedDealSnapshot
+      ? "No Deal"
+      : dealChecklistItems.length === 0
+      ? "Checklist Not Started"
+      : checklistProgress === 100
+      ? "Ready"
+      : "In Progress";
 
   if (loading) {
     return (
@@ -1613,9 +2947,22 @@ async function fetchAffordabilityAssessments() {
           <div className="rounded-xl bg-white p-6 shadow">
             <div className="flex items-start justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-slate-800">
-                  {lead.customer}
-                </h1>
+                <Link
+                  href={`/customers/${lead.id}`}
+                  className="group inline-flex items-center gap-2"
+                  title="Open Customer 360"
+                >
+                  <h1 className="text-3xl font-bold text-slate-800 group-hover:text-blue-700">
+                    {lead.customer}
+                  </h1>
+
+                  <span
+                    aria-hidden="true"
+                    className="text-lg font-bold text-slate-400 transition group-hover:text-blue-600"
+                  >
+                    ↗
+                  </span>
+                </Link>
                 <p className="mt-1 text-slate-500">
                   Interested in {lead.vehicle || "No vehicle selected"}
                 </p>
@@ -1921,18 +3268,23 @@ async function fetchAffordabilityAssessments() {
             <h2 className="text-xl font-bold text-slate-800">Quick Actions</h2>
 
             <div className="mt-5 space-y-3">
-              <button
-                onClick={() => {
-                  setTaskAssignedUserId(
-                    lead.assigned_user_id || profile?.id || ""
-                  );
-                  setShowTaskModal(true);
-                }}
-                className="w-full rounded-lg px-4 py-3 text-white transition"
-                style={{ backgroundColor: "var(--brand-primary)" }}
-              >
-                Add Follow-Up Task
-              </button>
+             <button
+  onClick={() => {
+    if (!profile?.id) return;
+
+    setTaskAssignedUserId(
+      canChooseTaskAssignee
+        ? lead.assigned_user_id || profile.id
+        : profile.id
+    );
+
+    setShowTaskModal(true);
+  }}
+  className="w-full rounded-lg px-4 py-3 text-white transition"
+  style={{ backgroundColor: "var(--brand-primary)" }}
+>
+  Add Follow-Up Task
+</button>
 
               <button
                 onClick={() => {
@@ -1972,16 +3324,53 @@ async function fetchAffordabilityAssessments() {
                 {linkedVehicle ? "Change Linked Vehicle" : "Link Vehicle"}
               </button>
 
+              {linkedDealSnapshot ? (
+                <>
+                  <Link
+                    href={`/deals/${linkedDealSnapshot.id}`}
+                    className="block w-full rounded-lg bg-slate-900 px-4 py-3 text-center text-white hover:bg-slate-700"
+                  >
+                    Open Deal #{linkedDealSnapshot.id}
+                  </Link>
+
+                  <WriteAccessGuard>
+                    <button
+                      type="button"
+                      onClick={openDealModal}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-700 hover:bg-slate-50"
+                    >
+                      Update Deal Details
+                    </button>
+                  </WriteAccessGuard>
+                </>
+              ) : (
+                <WriteAccessGuard>
+                  <button
+                    type="button"
+                    onClick={openDealModal}
+                    disabled={loadingLinkedDeal}
+                    className="w-full rounded-lg bg-purple-600 px-4 py-3 text-white hover:bg-purple-500 disabled:opacity-60"
+                  >
+                    {loadingLinkedDeal
+                      ? "Checking Deal..."
+                      : "Create Deal"}
+                  </button>
+                </WriteAccessGuard>
+              )}
+
               {financeApplicationId ? (
-                <a
-                  href={`/finance/${financeApplicationId}`}
-                  className="block w-full rounded-lg brand-primary-bg px-4 py-3 text-center text-white"
-                >
-                  Open Finance Application
-                </a>
+                profile?.role === "Sales" ? null : (
+                  <Link
+                    href={`/finance/${financeApplicationId}`}
+                    className="block w-full rounded-lg brand-primary-bg px-4 py-3 text-center text-white"
+                  >
+                    Open Finance Application
+                  </Link>
+                )
               ) : (
                 <button
-                  onClick={submitToFinance}
+                  type="button"
+                  onClick={() => void submitToFinance()}
                   className="w-full rounded-lg bg-green-600 px-4 py-3 text-white hover:bg-green-500"
                 >
                   Submit to Finance
@@ -1989,6 +3378,253 @@ async function fetchAffordabilityAssessments() {
               )}
             </div>
           </div>
+
+          {linkedDealSnapshot && (
+            <div className="rounded-xl bg-white p-6 shadow">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">
+                    Delivery Checklist
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Delivery readiness for Deal #{linkedDealSnapshot.id}.
+                  </p>
+                </div>
+
+                <Link
+                  href={`/deals/${linkedDealSnapshot.id}`}
+                  className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                >
+                  Open Full Checklist
+                </Link>
+              </div>
+
+              {loadingDealChecklist ? (
+                <p className="mt-5 text-sm text-slate-500">
+                  Loading delivery checklist...
+                </p>
+              ) : (
+                <>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Progress
+                      </p>
+                      <p className="mt-1 text-2xl font-bold text-slate-900">
+                        {checklistProgress}%
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Completed
+                      </p>
+                      <p className="mt-1 text-2xl font-bold text-green-700">
+                        {completedChecklistItems} / {dealChecklistItems.length}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Readiness
+                      </p>
+                      <p className={`mt-1 text-lg font-bold ${
+                        deliveryReadiness === "Ready"
+                          ? "text-green-700"
+                          : deliveryReadiness === "In Progress"
+                          ? "text-orange-700"
+                          : "text-slate-600"
+                      }`}>
+                        {deliveryReadiness}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full rounded-full bg-green-500 transition-all"
+                      style={{ width: `${checklistProgress}%` }}
+                    />
+                  </div>
+
+                  {dealChecklistItems.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                      <p className="text-sm font-semibold text-slate-700">
+                        Checklist not started
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Open the Deal to initialise and manage the delivery checklist.
+                      </p>
+                    </div>
+                  ) : outstandingChecklistItems.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
+                      <p className="font-semibold text-green-800">
+                        All checklist items are complete.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-4">
+                      <p className="text-sm font-semibold text-slate-700">
+                        Outstanding items
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {outstandingChecklistItems
+                          .slice(0, 5)
+                          .map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between gap-3 rounded-lg bg-orange-50 px-3 py-2"
+                            >
+                              <span className="text-sm font-medium text-orange-900">
+                                {item.title}
+                              </span>
+                              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-orange-700">
+                                {item.category || "Delivery"}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+
+                      {outstandingChecklistItems.length > 5 && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          +{outstandingChecklistItems.length - 5} more outstanding item(s)
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {financeApplicationId && (
+            <div className="rounded-xl bg-white p-6 shadow">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">
+                    Bank Finance Options
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Review the latest responses captured by Finance before contacting the customer.
+                  </p>
+                </div>
+
+                {profile?.role !== "Sales" && (
+                  <Link
+                    href={`/finance/${financeApplicationId}`}
+                    className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                  >
+                    Open Finance
+                  </Link>
+                )}
+              </div>
+
+              {loadingFinanceBankOffers ? (
+                <p className="mt-5 text-sm text-slate-500">Loading bank responses...</p>
+              ) : financeBankOffers.length === 0 ? (
+                <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                  <p className="font-semibold text-slate-700">No bank responses yet</p>
+                  <p className="mt-1 text-sm text-slate-500">Finance has not captured a bank decision for this application.</p>
+                </div>
+              ) : (
+                <div className="mt-5 space-y-4">
+                  {financeBankOffers.map((offer) => (
+                    <div
+                      key={offer.id}
+                      className={`rounded-xl border p-4 ${
+                        offer.is_selected
+                          ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200"
+                          : offer.status === "Approved"
+                          ? "border-green-200 bg-green-50"
+                          : offer.status === "Declined"
+                          ? "border-red-200 bg-red-50"
+                          : "border-orange-200 bg-orange-50"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-slate-900">{offer.bank_name}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Response {new Date(offer.response_date).toLocaleString("en-ZA")}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {offer.is_selected && (
+                            <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
+                              Customer Selected
+                            </span>
+                          )}
+                          <span className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          offer.status === "Approved"
+                            ? "bg-green-100 text-green-700"
+                            : offer.status === "Declined"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-orange-100 text-orange-700"
+                        }`}>
+                            {offer.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <div className="rounded-lg bg-white/70 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Approved Amount</p>
+                          <p className="mt-1 font-bold text-slate-900">{formatRand(offer.approved_amount)}</p>
+                        </div>
+                        <div className="rounded-lg bg-white/70 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Monthly Instalment</p>
+                          <p className="mt-1 font-bold text-slate-900">
+                            {offer.monthly_installment !== null
+                              ? `${formatRand(offer.monthly_installment)} / month`
+                              : "Not captured"}
+                          </p>
+                        </div>
+                        <div className="rounded-lg bg-white/70 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Rate / Term</p>
+                          <p className="mt-1 font-bold text-slate-900">
+                            {offer.interest_rate !== null ? `${offer.interest_rate}%` : "-"}
+                            {offer.term_months ? ` • ${offer.term_months} months` : ""}
+                          </p>
+                        </div>
+                        <div className="rounded-lg bg-white/70 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Deposit / Balloon</p>
+                          <p className="mt-1 font-bold text-slate-900">
+                            {formatRand(offer.deposit_amount)}
+                            {offer.balloon_percentage !== null ? ` • ${offer.balloon_percentage}% balloon` : ""}
+                          </p>
+                        </div>
+                      </div>
+
+                      {offer.status === "Approved" && !offer.is_selected && (
+                        <button
+                          type="button"
+                          onClick={() => void selectFinanceOfferForCustomer(offer)}
+                          disabled={selectingFinanceOfferId === offer.id}
+                          className="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
+                        >
+                          {selectingFinanceOfferId === offer.id
+                            ? "Selecting..."
+                            : "Customer Selected This Offer"}
+                        </button>
+                      )}
+
+                      {offer.conditions && (
+                        <p className="mt-3 text-sm text-slate-700">
+                          <strong>Conditions:</strong> {offer.conditions}
+                        </p>
+                      )}
+
+                      {offer.approval_expiry_date && (
+                        <p className="mt-2 text-xs font-semibold text-slate-500">
+                          Approval expires {new Date(`${offer.approval_expiry_date}T00:00:00`).toLocaleDateString("en-ZA")}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="rounded-xl bg-white p-6 shadow">
   
@@ -2761,24 +4397,33 @@ async function fetchAffordabilityAssessments() {
                       </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <a
-                        href={doc.file_url || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-100"
-                      >
-                        View
-                      </a>
+                   <div className="mt-4 grid grid-cols-2 gap-3">
+  <button
+    type="button"
+    onClick={() =>
+      void openSecureDocument(
+        doc.id,
+        "view"
+      )
+    }
+    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-100"
+  >
+    View
+  </button>
 
-                      <a
-                        href={doc.file_url || "#"}
-                        download
-                        className="rounded-lg brand-primary-bg px-3 py-2 text-center text-sm font-medium text-white"
-                      >
-                        Download
-                      </a>
-                    </div>
+  <button
+    type="button"
+    onClick={() =>
+      void openSecureDocument(
+        doc.id,
+        "download"
+      )
+    }
+    className="rounded-lg brand-primary-bg px-3 py-2 text-center text-sm font-medium text-white"
+  >
+    Download
+  </button>
+</div>
                   </div>
                 ))
               )}
@@ -2968,6 +4613,215 @@ async function fetchAffordabilityAssessments() {
           </div>
         </div>
       </div>
+
+      {showDealModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">
+                  {linkedDealSnapshot
+                    ? `Update Deal #${linkedDealSnapshot.id}`
+                    : "Create Draft Deal"}
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Capture the commercial deal values for this customer.
+                  The latest assessment and linked vehicle are used as defaults.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowDealModal(false)}
+                disabled={savingDeal}
+                className="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-6 rounded-xl bg-slate-50 p-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Customer
+                  </p>
+                  <p className="mt-1 font-bold text-slate-900">
+                    {lead.customer}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Vehicle
+                  </p>
+                  <p className="mt-1 font-bold text-slate-900">
+                    {linkedVehicle
+                      ? formatVehicleTitle(linkedVehicle)
+                      : lead.vehicle || "No vehicle selected"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-sm font-semibold text-slate-700">
+                  Sale Price
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={dealSalePrice}
+                  onChange={(event) =>
+                    setDealSalePrice(event.target.value)
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-slate-700">
+                  Deposit
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={dealDeposit}
+                  onChange={(event) =>
+                    setDealDeposit(event.target.value)
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-slate-700">
+                  Trade-In Value
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={dealTradeIn}
+                  onChange={(event) =>
+                    setDealTradeIn(event.target.value)
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-slate-700">
+                  Settlement Amount
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={dealSettlement}
+                  onChange={(event) =>
+                    setDealSettlement(event.target.value)
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-slate-700">
+                  Extras
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={dealExtras}
+                  onChange={(event) =>
+                    setDealExtras(event.target.value)
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-slate-700">
+                  Discount
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={dealDiscount}
+                  onChange={(event) =>
+                    setDealDiscount(event.target.value)
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-sm font-semibold text-slate-700">
+                  Deal Notes
+                </label>
+                <textarea
+                  value={dealNotes}
+                  onChange={(event) =>
+                    setDealNotes(event.target.value)
+                  }
+                  placeholder="Customer conditions, offer details, trade-in notes or special requirements..."
+                  className="mt-1 min-h-28 w-full rounded-xl border border-slate-300 p-3"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm font-semibold text-blue-900">
+                Estimated finance amount
+              </p>
+              <p className="mt-1 text-xl font-bold text-blue-700">
+                {formatRand(
+                  Math.max(
+                    (Number(dealSalePrice) || 0) +
+                      (Number(dealExtras) || 0) -
+                      (Number(dealDiscount) || 0) -
+                      (Number(dealTradeIn) || 0) +
+                      (Number(dealSettlement) || 0) -
+                      (Number(dealDeposit) || 0),
+                    0
+                  )
+                )}
+              </p>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDealModal(false)}
+                disabled={savingDeal}
+                className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void saveDealFromLead()}
+                disabled={savingDeal}
+                className="rounded-xl bg-purple-600 px-5 py-3 font-semibold text-white hover:bg-purple-500 disabled:opacity-50"
+              >
+                {savingDeal
+                  ? "Saving Deal..."
+                  : linkedDealSnapshot
+                  ? "Update Deal"
+                  : "Create Draft Deal"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showVehicleLinkModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -3273,23 +5127,53 @@ async function fetchAffordabilityAssessments() {
               </div>
 
               <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Assign To
-                </label>
-                <select
-                  value={taskAssignedUserId}
-                  onChange={(e) =>
-                    setTaskAssignedUserId(Number(e.target.value))
-                  }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
-                >
-                  {salesUsers.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.full_name || user.email} ({user.role})
-                    </option>
-                  ))}
-                </select>
-              </div>
+  <label className="text-sm font-medium text-slate-600">
+    Assign To
+  </label>
+
+  {canChooseTaskAssignee ? (
+    <select
+      value={taskAssignedUserId}
+      onChange={(event) =>
+        setTaskAssignedUserId(
+          event.target.value === ""
+            ? ""
+            : Number(event.target.value)
+        )
+      }
+      className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+    >
+      <option value="">
+        Select active user...
+      </option>
+
+      {salesUsers.map((user) => (
+        <option
+          key={user.id}
+          value={user.id}
+        >
+          {user.full_name ||
+            user.email ||
+            `User ${user.id}`}{" "}
+          ({user.role || "User"})
+        </option>
+      ))}
+    </select>
+  ) : (
+    <div className="mt-1 rounded-lg border border-slate-200 bg-slate-100 p-3">
+      <p className="font-medium text-slate-800">
+        {profile?.full_name ||
+          profile?.email ||
+          "Current User"}
+      </p>
+
+      <p className="mt-1 text-xs text-slate-500">
+        Tasks you create are automatically assigned
+        to you.
+      </p>
+    </div>
+  )}
+</div>
             </div>
 
             <div className="mt-6 flex justify-end gap-3">

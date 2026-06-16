@@ -17,6 +17,7 @@ type CalendarTask = {
   assigned_user_id: number | null;
   assigned_user_name: string | null;
   lead_id: number | null;
+  customer_name?: string | null;
 };
 
 type SalesUser = {
@@ -200,9 +201,55 @@ export default function CalendarPage() {
     if (error) {
       console.error("Error loading calendar:", error.message);
       setTasks([]);
-    } else {
-      setTasks(Array.isArray(data) ? data : []);
+      setLoading(false);
+      return;
     }
+
+    const baseTasks = Array.isArray(data)
+      ? (data as CalendarTask[])
+      : [];
+
+    const leadIds = Array.from(
+      new Set(
+        baseTasks
+          .map((task) => task.lead_id)
+          .filter((leadId): leadId is number => Boolean(leadId))
+      )
+    );
+
+    let customerMap = new Map<number, string>();
+
+    if (leadIds.length > 0) {
+      const { data: leadData, error: leadError } =
+        await supabase
+          .from("leads")
+          .select("id, customer")
+          .eq("company_id", profile.company_id)
+          .in("id", leadIds);
+
+      if (leadError) {
+        console.error(
+          "Error loading calendar customer names:",
+          leadError.message
+        );
+      } else {
+        customerMap = new Map(
+          (leadData || []).map((lead: any) => [
+            Number(lead.id),
+            lead.customer || "Unknown Customer",
+          ])
+        );
+      }
+    }
+
+    setTasks(
+      baseTasks.map((task) => ({
+        ...task,
+        customer_name: task.lead_id
+          ? customerMap.get(task.lead_id) || null
+          : null,
+      }))
+    );
 
     setLoading(false);
   }

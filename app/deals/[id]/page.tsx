@@ -26,6 +26,18 @@ type Deal = {
   notes: string | null;
   created_at: string | null;
   updated_at: string | null;
+  selected_bank_offer_id: number | null;
+  selected_bank_name: string | null;
+  finance_approved_amount: number | null;
+  finance_interest_rate: number | null;
+  finance_term_months: number | null;
+  finance_balloon_percentage: number | null;
+  finance_monthly_installment: number | null;
+  finance_approval_expiry_date: string | null;
+  prep_started_at: string | null;
+  planned_delivery_at: string | null;
+  ready_for_delivery_at: string | null;
+  delivered_at: string | null;
 };
 
 type DealActivity = {
@@ -39,6 +51,8 @@ type DealActivity = {
   activity_type: string | null;
   color: string | null;
   created_at: string | null;
+  is_required: boolean;
+  is_system_managed: boolean;
 };
 
 type DealChecklistItem = {
@@ -51,6 +65,8 @@ type DealChecklistItem = {
   completed_at: string | null;
   display_order: number | null;
   created_at: string | null;
+  is_required: boolean;
+  is_system_managed: boolean;
 };
 
 type DealDocument = {
@@ -74,6 +90,7 @@ const DEAL_STAGES = [
   "Offer Sent",
   "Finance Submitted",
   "Finance Approved",
+  "Sale Pending",
   "Ready for Delivery",
   "Delivered",
   "Lost",
@@ -105,16 +122,14 @@ const DEAL_DOCUMENT_TYPES = [
 ];
 
 const DEFAULT_CHECKLIST_ITEMS = [
-  { title: "Finance approved", category: "Finance" },
-  { title: "Deposit received", category: "Finance" },
-  { title: "Invoice prepared", category: "Admin" },
-  { title: "FICA / customer documents checked", category: "Admin" },
-  { title: "Trade-in documents checked", category: "Trade-In" },
-  { title: "Settlement amount confirmed", category: "Trade-In" },
-  { title: "Vehicle inspection completed", category: "Vehicle" },
-  { title: "Roadworthy / licensing checked", category: "Vehicle" },
-  { title: "Delivery date confirmed", category: "Delivery" },
-  { title: "Customer handover completed", category: "Delivery" },
+  { title: "Finance approved", category: "Finance", isRequired: true, isSystemManaged: true },
+  { title: "Customer documents verified", category: "Admin", isRequired: true, isSystemManaged: false },
+  { title: "Deposit received", category: "Finance", isRequired: true, isSystemManaged: false },
+  { title: "Invoice and contract prepared", category: "Admin", isRequired: true, isSystemManaged: false },
+  { title: "Vehicle inspection and preparation completed", category: "Vehicle", isRequired: true, isSystemManaged: false },
+  { title: "Roadworthy and licensing confirmed", category: "Vehicle", isRequired: true, isSystemManaged: false },
+  { title: "Delivery date confirmed", category: "Delivery", isRequired: true, isSystemManaged: true },
+  { title: "Customer handover completed", category: "Delivery", isRequired: true, isSystemManaged: true },
 ];
 
 function formatRand(value: number | null | undefined) {
@@ -145,6 +160,7 @@ function stageBadge(stage: string | null) {
     "Offer Sent": "bg-blue-100 text-blue-700",
     "Finance Submitted": "bg-orange-100 text-orange-700",
     "Finance Approved": "bg-green-100 text-green-700",
+    "Sale Pending": "bg-emerald-100 text-emerald-700",
     "Ready for Delivery": "bg-purple-100 text-purple-700",
     Delivered: "bg-emerald-100 text-emerald-700",
     Lost: "bg-red-100 text-red-700",
@@ -250,6 +266,8 @@ const [documentType, setDocumentType] = useState("Invoice");
 const [uploadingDocument, setUploadingDocument] = useState(false);
 const [loading, setLoading] = useState(true);
 const [saving, setSaving] = useState(false);
+const [workflowSaving, setWorkflowSaving] = useState(false);
+const [plannedDeliveryAt, setPlannedDeliveryAt] = useState("");
 
   const [stageDraft, setStageDraft] = useState("Draft");
   const [financeDraft, setFinanceDraft] = useState("Not Started");
@@ -265,6 +283,22 @@ const [saving, setSaving] = useState(false);
     checklistItems.length > 0
       ? Math.round((completedChecklistItems / checklistItems.length) * 100)
       : 0;
+
+  const requiredPreDeliveryItems = checklistItems.filter(
+    (item) =>
+      item.is_required &&
+      item.title.toLowerCase() !==
+        "customer handover completed"
+  );
+
+  const outstandingRequiredItems = requiredPreDeliveryItems.filter(
+    (item) => !item.is_completed
+  );
+
+  const isReadyForDelivery =
+    Boolean(deal?.planned_delivery_at) &&
+    requiredPreDeliveryItems.length > 0 &&
+    outstandingRequiredItems.length === 0;
 
   async function fetchDeal() {
     if (!profile?.company_id || !dealId) return;
@@ -294,6 +328,13 @@ const [saving, setSaving] = useState(false);
     setStageDraft(data.deal_stage || "Draft");
     setFinanceDraft(data.finance_status || "Not Started");
     setNotesDraft(data.notes || "");
+    setPlannedDeliveryAt(
+      data.planned_delivery_at
+        ? new Date(data.planned_delivery_at)
+            .toISOString()
+            .slice(0, 16)
+        : ""
+    );
     setLoading(false);
   }
 
@@ -346,6 +387,8 @@ async function fetchDealDocuments() {
     category: item.category,
     is_completed: false,
     display_order: index + 1,
+    is_required: item.isRequired,
+    is_system_managed: item.isSystemManaged,
   }));
 
   const { error } = await supabase
@@ -463,8 +506,8 @@ async function fetchDealDocuments() {
     const { error } = await supabase
       .from("deals")
       .update({
-        deal_stage: stageDraft,
-        finance_status: financeDraft,
+        deal_stage: deal.deal_stage,
+        finance_status: deal.finance_status,
         notes: notesDraft.trim() || null,
         updated_at: new Date().toISOString(),
       })
@@ -615,6 +658,11 @@ async function uploadDealDocument(file: File) {
   async function toggleChecklistItem(item: DealChecklistItem) {
     if (!profile?.company_id || !deal) return;
 
+    if (item.is_system_managed) {
+      alert("This checklist item is updated automatically by the workflow.");
+      return;
+    }
+
     const newValue = !item.is_completed;
 
     const { error } = await supabase
@@ -642,9 +690,90 @@ async function uploadDealDocument(file: File) {
     await fetchDealActivities();
   }
 
+  async function runDealWorkflow(
+    functionName:
+      | "start_deal_vehicle_preparation"
+      | "mark_deal_ready_for_delivery"
+      | "complete_deal_delivery",
+    successMessage: string
+  ) {
+    if (!deal) return;
+
+    setWorkflowSaving(true);
+
+    const { error } = await supabase.rpc(
+      functionName,
+      { p_deal_id: deal.id }
+    );
+
+    setWorkflowSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    await Promise.all([
+      fetchDeal(),
+      fetchChecklistItems(),
+      fetchDealActivities(),
+    ]);
+
+    alert(successMessage);
+  }
+
+  async function savePlannedDeliveryDate() {
+    if (!deal || !plannedDeliveryAt) {
+      alert("Please select the planned delivery date and time.");
+      return;
+    }
+
+    setWorkflowSaving(true);
+
+    const { error } = await supabase.rpc(
+      "set_deal_delivery_date",
+      {
+        p_deal_id: deal.id,
+        p_planned_delivery_at: new Date(
+          plannedDeliveryAt
+        ).toISOString(),
+      }
+    );
+
+    setWorkflowSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    await Promise.all([
+      fetchDeal(),
+      fetchChecklistItems(),
+      fetchDealActivities(),
+    ]);
+
+    alert("Delivery date saved successfully.");
+  }
+
   async function markReadyForDelivery() {
-    setStageDraft("Ready for Delivery");
-    setFinanceDraft("Approved");
+    await runDealWorkflow(
+      "mark_deal_ready_for_delivery",
+      "The Deal and vehicle are now Ready for Delivery."
+    );
+  }
+
+  async function completeDelivery() {
+    const confirmed = window.confirm(
+      "Confirm that the customer handover is complete and the vehicle has been delivered?"
+    );
+
+    if (!confirmed) return;
+
+    await runDealWorkflow(
+      "complete_deal_delivery",
+      "Delivery completed. The Deal, Lead and vehicle were updated."
+    );
   }
 
   if (loading) {
@@ -756,85 +885,150 @@ return (
 
         <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <h2 className="text-lg font-bold text-slate-900">Deal Controls</h2>
+            <h2 className="text-lg font-bold text-slate-900">
+              Sale and Delivery Workflow
+            </h2>
+
             <p className="mt-1 text-sm text-slate-500">
-              Update the current deal stage, finance progress and deal notes.
+              Move the selected vehicle through preparation, delivery readiness and customer handover.
             </p>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Deal Stage
-                </label>
-                <select
-                  value={stageDraft}
-                  onChange={(e) => setStageDraft(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"
-                >
-                  {DEAL_STAGES.map((stage) => (
-                    <option key={stage}>{stage}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() =>
+                  void runDealWorkflow(
+                    "start_deal_vehicle_preparation",
+                    "Vehicle preparation started."
+                  )
+                }
+                disabled={
+                  workflowSaving ||
+                  !deal.selected_bank_offer_id ||
+                  deal.deal_stage === "Delivered" ||
+                  deal.deal_stage === "Lost"
+                }
+                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Start Vehicle Preparation
+              </button>
 
-              <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Finance Status
-                </label>
-                <select
-                  value={financeDraft}
-                  onChange={(e) => setFinanceDraft(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"
-                >
-                  {FINANCE_STATUSES.map((status) => (
-                    <option key={status}>{status}</option>
-                  ))}
-                </select>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p className="font-semibold text-slate-700">Preparation started</p>
+                <p className="mt-1 text-slate-500">
+                  {formatDateTime(deal.prep_started_at)}
+                </p>
               </div>
+            </div>
 
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium text-slate-600">
-                  Deal Notes
-                </label>
-                <textarea
-                  value={notesDraft}
-                  onChange={(e) => setNotesDraft(e.target.value)}
-                  className="mt-1 min-h-32 w-full rounded-xl border border-slate-300 p-3 text-sm"
-                  placeholder="Finance notes, customer notes, delivery instructions..."
+            <div className="mt-5 rounded-2xl border border-purple-200 bg-purple-50 p-4">
+              <label className="text-sm font-semibold text-purple-900">
+                Planned Delivery Date and Time
+              </label>
+
+              <div className="mt-2 grid gap-3 sm:grid-cols-[1fr_auto]">
+                <input
+                  type="datetime-local"
+                  value={plannedDeliveryAt}
+                  onChange={(event) =>
+                    setPlannedDeliveryAt(event.target.value)
+                  }
+                  disabled={
+                    workflowSaving ||
+                    deal.deal_stage === "Delivered"
+                  }
+                  className="rounded-xl border border-purple-200 bg-white p-3 text-sm"
                 />
+
+                <button
+                  type="button"
+                  onClick={() => void savePlannedDeliveryDate()}
+                  disabled={
+                    workflowSaving ||
+                    !plannedDeliveryAt ||
+                    deal.deal_stage === "Delivered"
+                  }
+                  className="rounded-xl bg-purple-600 px-4 py-3 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-50"
+                >
+                  Save Delivery Date
+                </button>
               </div>
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-5 rounded-2xl border border-slate-200 p-4">
+              <p className="text-sm font-bold text-slate-900">
+                Required pre-delivery checks
+              </p>
+
+              {outstandingRequiredItems.length === 0 ? (
+                <p className="mt-2 text-sm font-semibold text-green-700">
+                  All required pre-delivery items are complete.
+                </p>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-sm text-orange-700">
+                    {outstandingRequiredItems.length} required item
+                    {outstandingRequiredItems.length === 1 ? "" : "s"} outstanding:
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {outstandingRequiredItems
+                      .map((item) => item.title)
+                      .join(" • ")}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button
-                onClick={() => quickSetStage("Finance Submitted")}
-                className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-bold text-orange-700 hover:bg-orange-100"
+                type="button"
+                onClick={() => void markReadyForDelivery()}
+                disabled={
+                  workflowSaving ||
+                  !isReadyForDelivery ||
+                  deal.deal_stage === "Delivered"
+                }
+                className="rounded-xl bg-purple-600 px-4 py-3 text-sm font-semibold text-white hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Set Finance Submitted
+                Mark Ready for Delivery
               </button>
 
               <button
-                onClick={() => quickSetStage("Finance Approved")}
-                className="rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-xs font-bold text-green-700 hover:bg-green-100"
+                type="button"
+                onClick={() => void completeDelivery()}
+                disabled={
+                  workflowSaving ||
+                  deal.deal_stage !== "Ready for Delivery"
+                }
+                className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Set Finance Approved
-              </button>
-
-              <button
-                onClick={markReadyForDelivery}
-                className="rounded-xl border border-purple-200 bg-purple-50 px-4 py-2 text-xs font-bold text-purple-700 hover:bg-purple-100"
-              >
-                Ready for Delivery
+                Complete Customer Handover
               </button>
             </div>
 
-            <button
-              onClick={saveDealUpdates}
-              disabled={saving}
-              className="mt-5 w-full rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
-            >
-              {saving ? "Saving..." : "Save Deal Updates"}
-            </button>
+            <div className="mt-6 border-t border-slate-200 pt-5">
+              <label className="text-sm font-medium text-slate-600">
+                Deal Notes
+              </label>
+
+              <textarea
+                value={notesDraft}
+                onChange={(event) =>
+                  setNotesDraft(event.target.value)
+                }
+                className="mt-1 min-h-28 w-full rounded-xl border border-slate-300 p-3 text-sm"
+                placeholder="Preparation notes, customer instructions or delivery comments..."
+              />
+
+              <button
+                type="button"
+                onClick={saveDealUpdates}
+                disabled={saving}
+                className="mt-3 w-full rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Save Notes"}
+              </button>
+            </div>
           </div>
 
           <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -850,6 +1044,18 @@ return (
               />
               <Info label="Created" value={formatDateTime(deal.created_at)} />
               <Info label="Last Updated" value={formatDateTime(deal.updated_at)} />
+              <Info
+                label="Planned Delivery"
+                value={formatDateTime(deal.planned_delivery_at)}
+              />
+              <Info
+                label="Ready Since"
+                value={formatDateTime(deal.ready_for_delivery_at)}
+              />
+              <Info
+                label="Delivered"
+                value={formatDateTime(deal.delivered_at)}
+              />
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-2">
@@ -881,6 +1087,70 @@ return (
             </div>
           </div>
         </div>
+
+        {deal.selected_bank_offer_id && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">
+                  Customer Selected Finance Offer
+                </p>
+                <h2 className="mt-1 text-xl font-bold text-emerald-950">
+                  {deal.selected_bank_name || "Approved Bank"}
+                </h2>
+              </div>
+
+              <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
+                Sale Pending
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <Info label="Approved Amount" value={formatRand(deal.finance_approved_amount)} />
+              <Info
+                label="Monthly Instalment"
+                value={
+                  deal.finance_monthly_installment !== null
+                    ? `${formatRand(deal.finance_monthly_installment)} / month`
+                    : "-"
+                }
+              />
+              <Info
+                label="Interest Rate"
+                value={
+                  deal.finance_interest_rate !== null
+                    ? `${deal.finance_interest_rate}%`
+                    : "-"
+                }
+              />
+              <Info
+                label="Term"
+                value={
+                  deal.finance_term_months
+                    ? `${deal.finance_term_months} months`
+                    : "-"
+                }
+              />
+              <Info label="Deposit" value={formatRand(deal.deposit_amount)} />
+              <Info
+                label="Balloon"
+                value={
+                  deal.finance_balloon_percentage !== null
+                    ? `${deal.finance_balloon_percentage}%`
+                    : "-"
+                }
+              />
+              <Info
+                label="Approval Expiry"
+                value={
+                  deal.finance_approval_expiry_date
+                    ? new Date(deal.finance_approval_expiry_date).toLocaleDateString("en-ZA")
+                    : "-"
+                }
+              />
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -929,7 +1199,8 @@ return (
                     type="checkbox"
                     checked={Boolean(item.is_completed)}
                     onChange={() => toggleChecklistItem(item)}
-                    className="mt-1 h-5 w-5 rounded border-slate-300"
+                    disabled={item.is_system_managed}
+                    className="mt-1 h-5 w-5 rounded border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
                   />
 
                   <div className="min-w-0 flex-1">
@@ -951,6 +1222,22 @@ return (
                       >
                         {item.category || "Delivery"}
                       </span>
+
+                      {item.is_required ? (
+                        <span className="rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-bold text-red-700">
+                          Required
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">
+                          Optional
+                        </span>
+                      )}
+
+                      {item.is_system_managed && (
+                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">
+                          Automatic
+                        </span>
+                      )}
                     </div>
 
                     {item.completed_at && (

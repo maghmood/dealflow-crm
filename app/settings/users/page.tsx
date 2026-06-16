@@ -19,7 +19,7 @@ type UserProfile = {
   created_at: string | null;
 };
 
-const roles = ["Admin", "Manager", "Sales", "Finance", "Stock", "ReadOnly"];
+const roles = ["Admin", "Manager", "Sales", "Finance"];
 
 export default function UsersPage() {
   const { profile } = useAuth();
@@ -144,6 +144,13 @@ async function handleInviteUser() {
   <DashboardLayout>
     <PageAccessGuard module="userManagement">
       <ReadOnlyNotice />
+
+      <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+        DealFlow now uses four practical roles for small dealerships:
+        Admin, Manager, Sales and Finance. Inventory responsibilities are
+        handled by Admin or Manager.
+      </div>
+
       <div className="mb-6 flex items-center justify-between">
   <div>
     <h1 className="text-3xl font-bold text-slate-800">

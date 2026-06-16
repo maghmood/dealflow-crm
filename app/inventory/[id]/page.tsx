@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
+import { canManageInventory } from "@/lib/auth";
 
 type InventoryVehicle = {
   id: number;
@@ -124,7 +125,9 @@ function statusBadge(status: string | null) {
     Available: "bg-green-100 text-green-700",
     Reserved: "bg-orange-100 text-orange-700",
     Sold: "bg-slate-200 text-slate-700",
+    "Sale Pending": "bg-emerald-100 text-emerald-700",
     "In Prep": "bg-blue-100 text-blue-700",
+    "Ready for Delivery": "bg-purple-100 text-purple-700",
     Delivered: "bg-purple-100 text-purple-700",
     "On Hold": "bg-red-100 text-red-700",
   };
@@ -177,6 +180,7 @@ export default function VehicleDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { profile } = useAuth();
+  const canEditInventory = canManageInventory(profile?.role);
 
   const vehicleId = Number(params.id);
 
@@ -223,6 +227,11 @@ export default function VehicleDetailPage() {
 
   async function fetchLeads() {
     if (!profile?.company_id) return;
+
+    if (!canEditInventory) {
+      setLeads([]);
+      return;
+    }
 
     let query = supabase
       .from("leads")
@@ -318,6 +327,11 @@ export default function VehicleDetailPage() {
   }
 
   async function reserveVehicle() {
+  if (!canEditInventory) {
+    alert("Only Admin and Manager users can reserve inventory vehicles.");
+    return;
+  }
+
     if (!profile?.company_id || !vehicle) return;
 
     if (!selectedLead) {
@@ -391,7 +405,23 @@ export default function VehicleDetailPage() {
   }
 
   async function releaseReservation() {
+  if (!canEditInventory) {
+    alert("Only Admin and Manager users can release inventory reservations.");
+    return;
+  }
+
     if (!profile?.company_id || !vehicle) return;
+
+    if (
+      ["Sale Pending", "In Prep", "Ready for Delivery", "Sold", "Delivered"].includes(
+        vehicle.status || ""
+      )
+    ) {
+      alert(
+        "This vehicle is controlled by an active sale or completed delivery. Update it from the Deal workflow."
+      );
+      return;
+    }
 
     const previousLeadId = vehicle.linked_lead_id;
     const previousLeadName =
@@ -448,7 +478,23 @@ export default function VehicleDetailPage() {
   }
 
   async function updateVehicleStatus(newStatus: string) {
+  if (!canEditInventory) {
+    alert("Only Admin and Manager users can change inventory status.");
+    return;
+  }
+
     if (!profile?.company_id || !vehicle) return;
+
+    if (
+      ["Sale Pending", "In Prep", "Ready for Delivery", "Sold", "Delivered"].includes(
+        vehicle.status || ""
+      )
+    ) {
+      alert(
+        "This vehicle status is controlled by the Deal delivery workflow."
+      );
+      return;
+    }
 
     setSaving(true);
 
@@ -502,6 +548,11 @@ export default function VehicleDetailPage() {
   }
 
 async function createDealFromVehicle() {
+  if (!canEditInventory) {
+    alert("Create the Deal from the Lead page. Inventory actions are limited to Admin and Manager.");
+    return;
+  }
+
   if (!profile?.company_id || !vehicle) return;
 
   if (!vehicle.linked_lead_id) {
@@ -673,8 +724,9 @@ return (
     Inventory
   </Link>
 
-  {vehicle.linked_lead_id && (
+  {canEditInventory && vehicle.linked_lead_id && (
     <button
+      type="button"
       onClick={createDealFromVehicle}
       disabled={saving}
       className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
@@ -759,80 +811,106 @@ return (
           </div>
 
           <div className="space-y-5">
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-              <h2 className="text-lg font-bold text-slate-900">
-                Reservation Workflow
-              </h2>
+            {canEditInventory ? (
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                <h2 className="text-lg font-bold text-slate-900">
+                  Reservation Workflow
+                </h2>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Reserve this vehicle for a lead, release it back to stock, or
-                move it into sold/delivered status.
-              </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Reserve this vehicle for a lead, release it back to stock, or
+                  move it into sold/delivered status.
+                </p>
 
-              <div className="mt-5">
-                <label className="text-sm font-medium text-slate-600">
-                  Select Lead
-                </label>
+                <div className="mt-5">
+                  <label className="text-sm font-medium text-slate-600">
+                    Select Lead
+                  </label>
 
-                <select
-                  value={selectedLeadId}
-                  onChange={(e) => setSelectedLeadId(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"
-                >
-                  <option value="">No lead selected</option>
-                  {leads.map((lead) => (
-                    <option key={lead.id} value={lead.id}>
-                      #{lead.id} • {lead.customer || "Unknown Customer"}
-                      {lead.vehicle ? ` • Current: ${lead.vehicle}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mt-4 grid gap-3">
-                <button
-                  onClick={reserveVehicle}
-                  disabled={saving}
-                  className="rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-500 disabled:opacity-60"
-                >
-                  {saving ? "Saving..." : "Reserve for Selected Lead"}
-                </button>
-
-                <button
-                  onClick={releaseReservation}
-                  disabled={saving || !vehicle.linked_lead_id}
-                  className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Release Reservation
-                </button>
-
-<button
-  onClick={createDealFromVehicle}
-  disabled={saving || !vehicle.linked_lead_id}
-  className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
->
-  Create Deal from Vehicle
-</button>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => updateVehicleStatus("Sold")}
-                    disabled={saving}
-                    className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+                  <select
+                    value={selectedLeadId}
+                    onChange={(event) =>
+                      setSelectedLeadId(event.target.value)
+                    }
+                    className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"
                   >
-                    Mark Sold
+                    <option value="">No lead selected</option>
+
+                    {leads.map((lead) => (
+                      <option key={lead.id} value={lead.id}>
+                        #{lead.id} • {lead.customer || "Unknown Customer"}
+                        {lead.vehicle
+                          ? ` • Current: ${lead.vehicle}`
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="mt-4 grid gap-3">
+                  <button
+                    type="button"
+                    onClick={reserveVehicle}
+                    disabled={saving}
+                    className="rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-500 disabled:opacity-60"
+                  >
+                    {saving
+                      ? "Saving..."
+                      : "Reserve for Selected Lead"}
                   </button>
 
                   <button
-                    onClick={() => updateVehicleStatus("Delivered")}
-                    disabled={saving}
-                    className="rounded-xl bg-purple-600 px-4 py-3 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
+                    type="button"
+                    onClick={releaseReservation}
+                    disabled={saving || !vehicle.linked_lead_id}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Mark Delivered
+                    Release Reservation
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={createDealFromVehicle}
+                    disabled={saving || !vehicle.linked_lead_id}
+                    className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Create Deal from Vehicle
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => updateVehicleStatus("Sold")}
+                      disabled={saving}
+                      className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+                    >
+                      Mark Sold
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => updateVehicleStatus("Delivered")}
+                      disabled={saving}
+                      className="rounded-xl bg-purple-600 px-4 py-3 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
+                    >
+                      Mark Delivered
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+                <h2 className="text-lg font-bold text-blue-900">
+                  Inventory View Only
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-blue-800">
+                  Sales users can browse vehicle information and open the linked
+                  Lead. Reservations, releases and stock-status changes are
+                  managed by an Admin or Manager.
+                </p>
+              </div>
+            )}
 
             <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
               <h2 className="text-lg font-bold text-slate-900">

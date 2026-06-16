@@ -5,6 +5,7 @@ import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
+import { canManageInventory } from "@/lib/auth";
 
 type InventoryVehicle = {
   id: number;
@@ -228,6 +229,7 @@ function VehiclePhoto({
 
 export default function InventoryPage() {
   const { profile } = useAuth();
+  const canEditInventory = canManageInventory(profile?.role);
 
   const [vehicles, setVehicles] = useState<InventoryVehicle[]>([]);
   const [leads, setLeads] = useState<LeadOption[]>([]);
@@ -300,12 +302,22 @@ export default function InventoryPage() {
   }, [profile?.company_id, profile?.role, profile?.id]);
 
   function openCreateVehicleModal() {
+    if (!canEditInventory) {
+      alert("Only Admin and Manager users can add inventory vehicles.");
+      return;
+    }
+
     setEditingVehicle(null);
     setForm(emptyForm());
     setShowVehicleModal(true);
   }
 
   function openEditVehicleModal(vehicle: InventoryVehicle) {
+    if (!canEditInventory) {
+      alert("Only Admin and Manager users can edit inventory vehicles.");
+      return;
+    }
+
     setEditingVehicle(vehicle);
 
     setForm({
@@ -334,6 +346,11 @@ export default function InventoryPage() {
 
   async function uploadVehicleImage(file: File) {
     if (!profile?.company_id) return;
+
+    if (!canEditInventory) {
+      alert("Only Admin and Manager users can upload inventory images.");
+      return;
+    }
 
     setUploadingImage(true);
 
@@ -410,6 +427,11 @@ export default function InventoryPage() {
 
   async function saveVehicle() {
     if (!profile?.company_id) return;
+
+    if (!canEditInventory) {
+      alert("Only Admin and Manager users can modify inventory.");
+      return;
+    }
 
     if (!form.make.trim() || !form.model.trim()) {
       alert("Please enter at least vehicle make and model.");
@@ -603,8 +625,16 @@ export default function InventoryPage() {
               </span>
             </div>
             <p className="mt-1 text-sm text-slate-500">
-              Manage vehicle stock, availability and lead links
+              {canEditInventory
+                ? "Manage vehicle stock, availability and lead links"
+                : "Browse current dealership inventory"}
             </p>
+
+            {!canEditInventory && (
+              <p className="mt-2 inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                View only — inventory changes are managed by Admin or Manager
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -612,12 +642,15 @@ export default function InventoryPage() {
               Export
             </button>
 
-            <button
-              onClick={openCreateVehicleModal}
-              className="rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-            >
-              + Add Vehicle
-            </button>
+            {canEditInventory && (
+              <button
+                type="button"
+                onClick={openCreateVehicleModal}
+                className="rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+              >
+                + Add Vehicle
+              </button>
+            )}
           </div>
         </div>
 
@@ -744,12 +777,15 @@ export default function InventoryPage() {
             <p className="mt-2 text-slate-500">
               Add your first vehicle to start managing dealership stock.
             </p>
-            <button
-              onClick={openCreateVehicleModal}
-              className="mt-5 rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
-            >
-              + Add Vehicle
-            </button>
+            {canEditInventory && (
+              <button
+                type="button"
+                onClick={openCreateVehicleModal}
+                className="mt-5 rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
+              >
+                + Add Vehicle
+              </button>
+            )}
           </div>
         ) : viewMode === "grid" ? (
           <div
@@ -869,12 +905,15 @@ export default function InventoryPage() {
     View
   </Link>
 
-  <button
-    onClick={() => openEditVehicleModal(vehicle)}
-    className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-  >
-    Edit
-  </button>
+  {canEditInventory && (
+    <button
+      type="button"
+      onClick={() => openEditVehicleModal(vehicle)}
+      className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+    >
+      Edit
+    </button>
+  )}
 </div>
                     </div>
                   </div>
@@ -985,12 +1024,15 @@ export default function InventoryPage() {
     View
   </Link>
 
-  <button
-    onClick={() => openEditVehicleModal(vehicle)}
-    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-  >
-    Edit
-  </button>
+  {canEditInventory && (
+    <button
+      type="button"
+      onClick={() => openEditVehicleModal(vehicle)}
+      className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+    >
+      Edit
+    </button>
+  )}
 </div>
                   </div>
                 </article>
@@ -1000,7 +1042,7 @@ export default function InventoryPage() {
         )}
       </div>
 
-      {showVehicleModal && (
+      {showVehicleModal && canEditInventory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4">
           <div className="my-10 w-full max-w-5xl rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">

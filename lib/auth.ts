@@ -2,7 +2,13 @@ export type UserRole =
   | "Admin"
   | "Manager"
   | "Sales"
-  | "Finance"
+  | "Finance";
+
+/*
+ * Temporary compatibility only while old database users are migrated.
+ * New users cannot be created with these roles.
+ */
+export type LegacyUserRole =
   | "Stock"
   | "ReadOnly";
 
@@ -33,6 +39,7 @@ const permissions: Record<UserRole, AppModule[]> = {
     "tasks",
     "calendar",
     "customers",
+    "whatsapp",
     "finance",
     "documents",
     "inventory",
@@ -41,7 +48,6 @@ const permissions: Record<UserRole, AppModule[]> = {
     "automations",
     "settings",
     "userManagement",
-    "whatsapp",
   ],
 
   Manager: [
@@ -52,6 +58,7 @@ const permissions: Record<UserRole, AppModule[]> = {
     "tasks",
     "calendar",
     "customers",
+    "whatsapp",
     "finance",
     "documents",
     "inventory",
@@ -59,7 +66,6 @@ const permissions: Record<UserRole, AppModule[]> = {
     "reports",
     "automations",
     "settings",
-    "whatsapp",
   ],
 
   Sales: [
@@ -70,85 +76,120 @@ const permissions: Record<UserRole, AppModule[]> = {
     "tasks",
     "calendar",
     "customers",
+    "whatsapp",
     "documents",
     "inventory",
     "deals",
-    "whatsapp",
   ],
 
   Finance: [
     "dashboard",
-    "leadDetail",
     "tasks",
-    "calendar",
-    "customers",
     "finance",
     "documents",
-    "inventory",
-    "deals",
-    "reports",
-    "whatsapp",
-  ],
-
-  Stock: [
-    "dashboard",
-    "customers",
-    "documents",
-    "inventory",
-    "deals",
-    "reports",
-  ],
-
-  ReadOnly: [
-    "dashboard",
-    "leads",
-    "leadDetail",
-    "pipeline",
-    "tasks",
-    "calendar",
-    "customers",
-    "finance",
-    "documents",
-    "inventory",
-    "deals",
-    "reports",
-    "whatsapp",
   ],
 };
 
-export function canAccessRole(
-  role: UserRole | null | undefined,
-  module: AppModule
-): boolean {
-  if (!role) return false;
-  return permissions[role]?.includes(module) || false;
+export function normalizeRole(
+  role: string | null | undefined
+): UserRole | null {
+  if (!role) return null;
+
+  if (
+    role === "Admin" ||
+    role === "Manager" ||
+    role === "Sales" ||
+    role === "Finance"
+  ) {
+    return role;
+  }
+
+  /*
+   * Temporary migration fallback:
+   * Stock users behave as Managers.
+   * ReadOnly users behave as Sales until SQL migration runs.
+   */
+  if (role === "Stock") return "Manager";
+  if (role === "ReadOnly") return "Sales";
+
+  return null;
 }
 
-export function isReadOnlyRole(role: UserRole | null | undefined): boolean {
+export function canAccessRole(
+  role: string | null | undefined,
+  module: AppModule
+): boolean {
+  const normalizedRole = normalizeRole(role);
+
+  if (!normalizedRole) return false;
+
+  return permissions[normalizedRole].includes(module);
+}
+
+export function isReadOnlyRole(
+  role: string | null | undefined
+): boolean {
+  /*
+   * Retained so older components still compile.
+   * After the migration there is no ReadOnly role.
+   */
   return role === "ReadOnly";
 }
 
-export function canWriteRole(role: UserRole | null | undefined): boolean {
-  if (!role) return false;
-  return role !== "ReadOnly";
+export function canWriteRole(
+  role: string | null | undefined
+): boolean {
+  return normalizeRole(role) !== null;
 }
 
-export function canManageUsers(role: UserRole | null | undefined): boolean {
-  return role === "Admin";
+export function canManageUsers(
+  role: string | null | undefined
+): boolean {
+  return normalizeRole(role) === "Admin";
 }
 
-export function canManageSettings(role: UserRole | null | undefined): boolean {
-  return role === "Admin" || role === "Manager";
+export function canManageSettings(
+  role: string | null | undefined
+): boolean {
+  const normalizedRole = normalizeRole(role);
+
+  return (
+    normalizedRole === "Admin" ||
+    normalizedRole === "Manager"
+  );
 }
 
-export function canManageInventory(role: UserRole | null | undefined): boolean {
-  return role === "Admin" || role === "Manager" || role === "Stock";
+export function canManageInventory(
+  role: string | null | undefined
+): boolean {
+  const normalizedRole = normalizeRole(role);
+
+  return (
+    normalizedRole === "Admin" ||
+    normalizedRole === "Manager"
+  );
 }
 
-export function canManageFinance(role: UserRole | null | undefined): boolean {
-  return role === "Admin" || role === "Manager" || role === "Finance";
+export function canManageFinance(
+  role: string | null | undefined
+): boolean {
+  const normalizedRole = normalizeRole(role);
+
+  return (
+    normalizedRole === "Admin" ||
+    normalizedRole === "Manager" ||
+    normalizedRole === "Finance"
+  );
 }
 
-export function canManageDeals(role: UserRole | null | undefined): boolean {
-  return role === "Admin" || role === "Manager" || role === "Sales" || role === "Finance";
+export function canManageDeals(
+  role: string | null | undefined
+): boolean {
+  const normalizedRole = normalizeRole(role);
+
+  return (
+    normalizedRole === "Admin" ||
+    normalizedRole === "Manager" ||
+    normalizedRole === "Sales"
+  );
 }

@@ -7,19 +7,29 @@ function extractFinanceDocumentPath(fileUrl: string | null) {
   try {
     const url = new URL(fileUrl);
 
-    const publicMarker = "/storage/v1/object/public/finance-documents/";
-    const publicMarkerIndex = url.pathname.indexOf(publicMarker);
+    const publicMarker =
+      "/storage/v1/object/public/finance-documents/";
+    const publicMarkerIndex =
+      url.pathname.indexOf(publicMarker);
 
     if (publicMarkerIndex !== -1) {
-      const rawPath = url.pathname.slice(publicMarkerIndex + publicMarker.length);
+      const rawPath = url.pathname.slice(
+        publicMarkerIndex + publicMarker.length
+      );
+
       return decodeURIComponent(rawPath);
     }
 
-    const signedMarker = "/storage/v1/object/sign/finance-documents/";
-    const signedMarkerIndex = url.pathname.indexOf(signedMarker);
+    const signedMarker =
+      "/storage/v1/object/sign/finance-documents/";
+    const signedMarkerIndex =
+      url.pathname.indexOf(signedMarker);
 
     if (signedMarkerIndex !== -1) {
-      const rawPath = url.pathname.slice(signedMarkerIndex + signedMarker.length);
+      const rawPath = url.pathname.slice(
+        signedMarkerIndex + signedMarker.length
+      );
+
       return decodeURIComponent(rawPath);
     }
 
@@ -29,7 +39,9 @@ function extractFinanceDocumentPath(fileUrl: string | null) {
     const markerIndex = fileUrl.indexOf(marker);
 
     if (markerIndex !== -1) {
-      return decodeURIComponent(fileUrl.slice(markerIndex + marker.length));
+      return decodeURIComponent(
+        fileUrl.slice(markerIndex + marker.length)
+      );
     }
 
     return null;
@@ -51,8 +63,12 @@ export async function GET(
       );
     }
 
-    const authHeader = req.headers.get("authorization") || "";
-    const token = authHeader.replace("Bearer ", "").trim();
+    const authHeader =
+      req.headers.get("authorization") || "";
+
+    const token = authHeader
+      .replace(/^Bearer\s+/i, "")
+      .trim();
 
     if (!token) {
       return NextResponse.json(
@@ -73,9 +89,14 @@ export async function GET(
       );
     }
 
-    const { data: profile, error: profileError } = await supabaseAdmin
+    const {
+      data: profile,
+      error: profileError,
+    } = await supabaseAdmin
       .from("user_profiles")
-      .select("id, auth_user_id, company_id, role, status")
+      .select(
+        "id, auth_user_id, company_id, role, status"
+      )
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
@@ -86,16 +107,21 @@ export async function GET(
       );
     }
 
-    if (profile.status && profile.status !== "Active") {
+    if (profile.status !== "Active") {
       return NextResponse.json(
         { error: "User profile is not active." },
         { status: 403 }
       );
     }
 
-    const { data: document, error: documentError } = await supabaseAdmin
+    const {
+      data: document,
+      error: documentError,
+    } = await supabaseAdmin
       .from("finance_documents")
-      .select("id, company_id, document_name, file_url")
+      .select(
+        "id, company_id, lead_id, document_name, file_path, file_url"
+      )
       .eq("id", documentId)
       .maybeSingle();
 
@@ -108,38 +134,64 @@ export async function GET(
 
     if (document.company_id !== profile.company_id) {
       return NextResponse.json(
-        { error: "You do not have permission to access this document." },
+        {
+          error:
+            "You do not have permission to access this document.",
+        },
         { status: 403 }
       );
     }
 
-    const filePath = extractFinanceDocumentPath(document.file_url);
+    /*
+     * Finance uploads store the actual bucket path in file_path.
+     * Older records may only have file_url, so keep that as a fallback.
+     */
+    const filePath =
+      document.file_path?.trim() ||
+      extractFinanceDocumentPath(
+        document.file_url
+      );
 
     if (!filePath) {
       return NextResponse.json(
-        { error: "Could not determine document storage path." },
+        {
+          error:
+            "Could not determine document storage path.",
+        },
         { status: 400 }
       );
     }
 
     const requestUrl = new URL(req.url);
-    const mode = requestUrl.searchParams.get("mode");
+    const mode =
+      requestUrl.searchParams.get("mode");
 
-    const { data: signedData, error: signedError } =
-      await supabaseAdmin.storage
-        .from("finance-documents")
-        .createSignedUrl(filePath, 60 * 5, {
+    const {
+      data: signedData,
+      error: signedError,
+    } = await supabaseAdmin.storage
+      .from("finance-documents")
+      .createSignedUrl(
+        filePath,
+        60 * 5,
+        {
           download:
             mode === "download"
-              ? document.document_name || "document"
+              ? document.document_name ||
+                "document"
               : false,
-        });
+        }
+      );
 
-    if (signedError || !signedData?.signedUrl) {
+    if (
+      signedError ||
+      !signedData?.signedUrl
+    ) {
       return NextResponse.json(
         {
           error:
-            signedError?.message || "Could not create secure document link.",
+            signedError?.message ||
+            "Could not create secure document link.",
         },
         { status: 500 }
       );
@@ -150,7 +202,10 @@ export async function GET(
       expiresInSeconds: 60 * 5,
     });
   } catch (error) {
-    console.error("Signed document URL error:", error);
+    console.error(
+      "Signed document URL error:",
+      error
+    );
 
     return NextResponse.json(
       { error: "Unexpected server error." },
