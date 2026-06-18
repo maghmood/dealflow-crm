@@ -42,6 +42,21 @@ type AssignableUser = {
   role: string | null;
 };
 
+
+const LEAD_SOURCE_OPTIONS = [
+  "Walk-in",
+  "Phone Call",
+  "WhatsApp",
+  "Facebook",
+  "Instagram",
+  "Website",
+  "Referral",
+  "Repeat Customer",
+  "AutoTrader / Cars.co.za",
+  "Finance Lead",
+  "Other",
+];
+
 function vehicleDisplayName(vehicle: InventoryVehicle) {
   return `${vehicle.year || ""} ${vehicle.make || ""} ${vehicle.model || ""} ${
     vehicle.variant || ""
@@ -69,6 +84,7 @@ export default function LeadsPage() {
   const [otherVehicleInterest, setOtherVehicleInterest] = useState("");
   const [assignedUserId, setAssignedUserId] = useState<number | "">("");
   const [budget, setBudget] = useState("");
+  const [leadSource, setLeadSource] = useState("Walk-in");
 
   const canChooseSalesperson =
     profile?.role === "Admin" || profile?.role === "Manager";
@@ -170,6 +186,7 @@ export default function LeadsPage() {
     setVehicleSelection("");
     setOtherVehicleInterest("");
     setBudget("");
+    setLeadSource("Walk-in");
 
     if (profile?.role === "Sales") {
       setAssignedUserId(profile.id);
@@ -200,6 +217,11 @@ export default function LeadsPage() {
 
     if (!vehicleSelection) {
       alert("Please select a vehicle interest.");
+      return;
+    }
+
+    if (!leadSource.trim()) {
+      alert("Please select the lead source.");
       return;
     }
 
@@ -255,7 +277,7 @@ export default function LeadsPage() {
         budget: budget.trim() || null,
         status: "New Lead",
         finance: "Not Submitted",
-        source: "Manual",
+        source: leadSource.trim(),
         company_id: profile.company_id,
         assigned_user_id: selectedAssignee.id,
         assigned_user_name:
@@ -461,6 +483,30 @@ export default function LeadsPage() {
                       className="mt-1 w-full rounded-lg border border-slate-300 p-3"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold text-slate-700">
+                    Lead Source
+                  </label>
+
+                  <select
+                    value={leadSource}
+                    onChange={(event) =>
+                      setLeadSource(event.target.value)
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-3"
+                  >
+                    {LEAD_SOURCE_OPTIONS.map((source) => (
+                      <option key={source} value={source}>
+                        {source}
+                      </option>
+                    ))}
+                  </select>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Capture this properly for dealership source reporting.
+                  </p>
                 </div>
 
                 <div>
