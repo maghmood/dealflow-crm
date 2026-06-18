@@ -18,15 +18,20 @@ type Task = {
   lead_id: number | null;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
+  created_at: string | null;
   customer_name?: string | null;
 };
 
 type Lead = {
   id: number;
+  customer: string | null;
   status: string | null;
   source: string | null;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
+  last_contacted_at: string | null;
+  last_contact_method: string | null;
+  last_contact_outcome: string | null;
 };
 
 type Deal = {
@@ -46,6 +51,22 @@ type FinanceApplication = {
 type InventoryVehicle = {
   id: number;
   status: string | null;
+};
+
+type CommunicationLog = {
+  id: number;
+  lead_id: number;
+  deal_id: number | null;
+  channel: string;
+  send_status: string | null;
+  outcome: string | null;
+  summary: string | null;
+  customer_name: string | null;
+  created_by_id: number | null;
+  created_by_name: string | null;
+  created_at: string;
+  sent_at: string | null;
+  resolved_at: string | null;
 };
 
 function isSameDay(dateOne: Date, dateTwo: Date) {
@@ -119,6 +140,48 @@ function isTaskDueSoon(task: Task) {
   return due >= now && due <= now + oneHour;
 }
 
+function isCommunicationFollowUpTask(task: Task) {
+  const reasonLike = [
+    "WHATSAPP_FOLLOW_UP",
+    "EMAIL_FOLLOW_UP",
+    "COMMUNICATION_FOLLOW_UP",
+    "CUSTOMER_FOLLOW_UP",
+  ];
+
+  const searchable = `${task.title || ""} ${task.task_type || ""} ${
+    task.description || ""
+  }`.toLowerCase();
+
+  return (
+    reasonLike.some((reason) =>
+      searchable.includes(reason.toLowerCase())
+    ) ||
+    searchable.includes("whatsapp") ||
+    searchable.includes("email") ||
+    searchable.includes("communication")
+  );
+}
+
+function isPendingCommunication(log: CommunicationLog) {
+  const status = log.send_status || "Pending Outcome";
+
+  return (
+    !log.resolved_at &&
+    ["Pending Outcome", "Sent Manually", "Follow-up Created"].includes(status)
+  );
+}
+
+function isActiveLeadForContact(lead: Lead) {
+  return !isLostLeadStatus(lead.status) && !isConvertedLeadStatus(lead.status);
+}
+
+function isOlderThanDays(value: string | null | undefined, days: number) {
+  if (!value) return true;
+
+  const ageMs = new Date().getTime() - new Date(value).getTime();
+  return ageMs > days * 24 * 60 * 60 * 1000;
+}
+
 function agendaCardStyle(task: Task) {
   if (isTaskOverdue(task)) {
     return "border-red-400 bg-red-50 text-red-950";
@@ -165,6 +228,7 @@ export default function Home() {
   const [financeApps, setFinanceApps] = useState<FinanceApplication[]>([]);
   const [vehicles, setVehicles] = useState<InventoryVehicle[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [communicationLogs, setCommunicationLogs] = useState<CommunicationLog[]>([]);
 
   async function fetchTasks() {
     if (!profile?.company_id) return;
@@ -172,7 +236,7 @@ export default function Home() {
     let query = supabase
       .from("tasks")
       .select(
-        "id, title, description, due_date, status, priority, task_type, task_scope, lead_id, assigned_user_id, assigned_user_name"
+        "id, title, description, due_date, status, priority, task_type, task_scope, lead_id, assigned_user_id, assigned_user_name, created_at"
       )
       .eq("company_id", profile.company_id)
       .order("due_date", { ascending: true });
@@ -239,6 +303,44 @@ export default function Home() {
     );
   }
 
+
+  async function fetchCommunicationLogs() {
+    if (!profile?.company_id) return;
+
+    if (profile.role === "Finance") {
+      setCommunicationLogs([]);
+      return;
+    }
+
+    let query = supabase
+      .from("communication_logs")
+      .select(
+        "id, lead_id, deal_id, channel, send_status, outcome, summary, customer_name, created_by_id, created_by_name, created_at, sent_at, resolved_at"
+      )
+      .eq("company_id", profile.company_id)
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (profile.role === "Sales") {
+      query = query.eq("created_by_id", profile.id);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error(
+        "Error loading communication accountability:",
+        error.message
+      );
+      setCommunicationLogs([]);
+      return;
+    }
+
+    setCommunicationLogs(
+      Array.isArray(data) ? (data as CommunicationLog[]) : []
+    );
+  }
+
   async function fetchDashboardData() {
     if (!profile?.company_id) return;
 
@@ -254,7 +356,7 @@ export default function Home() {
       let leadQuery = supabase
         .from("leads")
         .select(
-          "id, status, source, assigned_user_id, assigned_user_name"
+          "id, customer, status, source, assigned_user_id, assigned_user_name, last_contacted_at, last_contact_method, last_contact_outcome"
         )
         .eq("company_id", profile.company_id);
 
@@ -358,10 +460,12 @@ export default function Home() {
 
     void fetchTasks();
     void fetchDashboardData();
+    void fetchCommunicationLogs();
 
     function handleTaskUpdated() {
       void fetchTasks();
       void fetchDashboardData();
+      void fetchCommunicationLogs();
     }
 
     window.addEventListener(
@@ -552,6 +656,167 @@ export default function Home() {
     leads: stats.leads,
     closed: stats.closed,
   }));
+
+
+  const pendingCommunicationLogs = useMemo(
+    () => communicationLogs.filter((log) => isPendingCommunication(log)),
+    [communicationLogs]
+  );
+
+  const communicationLogsToday = useMemo(
+    () =>
+      communicationLogs.filter((log) =>
+        isSameDay(new Date(log.created_at), new Date())
+      ),
+    [communicationLogs]
+  );
+
+  const contactedTodayLeadIds = new Set(
+    communicationLogsToday.map((log) => log.lead_id)
+  );
+
+  const communicationFollowUpTasks = useMemo(
+    () =>
+      openTasks.filter((task) => isCommunicationFollowUpTask(task)),
+    [openTasks]
+  );
+
+  const overdueCommunicationFollowUps = useMemo(
+    () =>
+      communicationFollowUpTasks.filter((task) => isTaskOverdue(task)),
+    [communicationFollowUpTasks]
+  );
+
+  const leadsNotContacted = useMemo(
+    () =>
+      leads.filter(
+        (lead) =>
+          isActiveLeadForContact(lead) &&
+          isOlderThanDays(lead.last_contacted_at, 2)
+      ),
+    [leads]
+  );
+
+  const openWhatsAppFollowUps = communicationFollowUpTasks.filter((task) =>
+    `${task.title || ""} ${task.description || ""} ${task.task_type || ""}`
+      .toLowerCase()
+      .includes("whatsapp")
+  ).length;
+
+  const openEmailFollowUps = communicationFollowUpTasks.filter((task) =>
+    `${task.title || ""} ${task.description || ""} ${task.task_type || ""}`
+      .toLowerCase()
+      .includes("email")
+  ).length;
+
+  const communicationByUser = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        userName: string;
+        pending: number;
+        overdueFollowUps: number;
+        contactedToday: number;
+        notContacted: number;
+      }
+    >();
+
+    function ensureUser(userName: string) {
+      if (!map.has(userName)) {
+        map.set(userName, {
+          userName,
+          pending: 0,
+          overdueFollowUps: 0,
+          contactedToday: 0,
+          notContacted: 0,
+        });
+      }
+
+      return map.get(userName)!;
+    }
+
+    leads.forEach((lead) => {
+      const userName = lead.assigned_user_name || "Unassigned";
+      const row = ensureUser(userName);
+
+      if (
+        isActiveLeadForContact(lead) &&
+        isOlderThanDays(lead.last_contacted_at, 2)
+      ) {
+        row.notContacted += 1;
+      }
+    });
+
+    pendingCommunicationLogs.forEach((log) => {
+      const userName = log.created_by_name || "Unknown User";
+      ensureUser(userName).pending += 1;
+    });
+
+    overdueCommunicationFollowUps.forEach((task) => {
+      const userName = task.assigned_user_name || "Unassigned";
+      ensureUser(userName).overdueFollowUps += 1;
+    });
+
+    communicationLogsToday.forEach((log) => {
+      const userName = log.created_by_name || "Unknown User";
+      ensureUser(userName).contactedToday += 1;
+    });
+
+    return Array.from(map.values()).sort(
+      (a, b) =>
+        b.pending +
+        b.overdueFollowUps +
+        b.notContacted -
+        (a.pending + a.overdueFollowUps + a.notContacted)
+    );
+  }, [
+    leads,
+    pendingCommunicationLogs,
+    overdueCommunicationFollowUps,
+    communicationLogsToday,
+  ]);
+
+  const atRiskCommunicationItems = useMemo(() => {
+    const pendingItems = pendingCommunicationLogs.slice(0, 4).map((log) => ({
+      id: `pending-${log.id}`,
+      label: "Pending outcome",
+      customer: log.customer_name || `Lead #${log.lead_id}`,
+      detail: `${log.channel} action by ${log.created_by_name || "user"} has not been resolved.`,
+      href: `/leads/${log.lead_id}`,
+      severity: "orange",
+      date: log.created_at,
+    }));
+
+    const overdueItems = overdueCommunicationFollowUps.slice(0, 4).map((task) => ({
+      id: `task-${task.id}`,
+      label: "Overdue follow-up",
+      customer: task.customer_name || `Lead #${task.lead_id}`,
+      detail: `${task.title} assigned to ${task.assigned_user_name || "user"}.`,
+      href: `/tasks?taskId=${task.id}`,
+      severity: "red",
+      date: task.due_date || task.created_at || "",
+    }));
+
+    const noContactItems = leadsNotContacted.slice(0, 4).map((lead) => ({
+      id: `no-contact-${lead.id}`,
+      label: "No recent contact",
+      customer: lead.customer || `Lead #${lead.id}`,
+      detail: lead.last_contacted_at
+        ? `Last contacted ${formatDateTime(lead.last_contacted_at)} via ${
+            lead.last_contact_method || "unknown"
+          }.`
+        : "No contact has been logged yet.",
+      href: `/leads/${lead.id}`,
+      severity: "blue",
+      date: lead.last_contacted_at || "",
+    }));
+
+    return [...overdueItems, ...pendingItems, ...noContactItems].slice(0, 8);
+  }, [
+    pendingCommunicationLogs,
+    overdueCommunicationFollowUps,
+    leadsNotContacted,
+  ]);
 
   const maxStatusCount =
     leadsByStatus.length > 0
@@ -868,6 +1133,170 @@ export default function Home() {
           </div>
         </div>
 
+
+        {!isFinanceDashboard && (
+          <div className="rounded-xl bg-white p-6 shadow">
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">
+                  Communication Accountability
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Pending outcomes, overdue communication follow-ups and leads needing contact
+                </p>
+              </div>
+
+              <Link
+                href="/tasks"
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+              >
+                Open Tasks
+              </Link>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+              <CommunicationMetric
+                label="Pending Outcomes"
+                value={pendingCommunicationLogs.length}
+                tone="orange"
+              />
+              <CommunicationMetric
+                label="Overdue Follow-ups"
+                value={overdueCommunicationFollowUps.length}
+                tone="red"
+              />
+              <CommunicationMetric
+                label="No Contact 2+ Days"
+                value={leadsNotContacted.length}
+                tone="blue"
+              />
+              <CommunicationMetric
+                label="Contacted Today"
+                value={contactedTodayLeadIds.size}
+                tone="green"
+              />
+              <CommunicationMetric
+                label="WhatsApp Follow-ups"
+                value={openWhatsAppFollowUps}
+                tone="purple"
+              />
+              <CommunicationMetric
+                label="Email Follow-ups"
+                value={openEmailFollowUps}
+                tone="slate"
+              />
+            </div>
+
+            <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <h3 className="text-lg font-bold text-slate-900">
+                  By Salesperson
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Use this for daily accountability check-ins.
+                </p>
+
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                        <th className="py-3 pr-3">User</th>
+                        <th className="py-3 pr-3">Pending</th>
+                        <th className="py-3 pr-3">Overdue</th>
+                        <th className="py-3 pr-3">Contacted Today</th>
+                        <th className="py-3 pr-3">No Contact</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {communicationByUser.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="py-6 text-center text-slate-500"
+                          >
+                            No communication activity captured yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        communicationByUser.map((row) => (
+                          <tr
+                            key={row.userName}
+                            className="border-b border-slate-200 last:border-0"
+                          >
+                            <td className="py-3 pr-3 font-semibold text-slate-800">
+                              {row.userName}
+                            </td>
+                            <td className="py-3 pr-3 text-orange-700">
+                              {row.pending}
+                            </td>
+                            <td className="py-3 pr-3 text-red-700">
+                              {row.overdueFollowUps}
+                            </td>
+                            <td className="py-3 pr-3 text-green-700">
+                              {row.contactedToday}
+                            </td>
+                            <td className="py-3 pr-3 text-blue-700">
+                              {row.notContacted}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <h3 className="text-lg font-bold text-slate-900">
+                  At Risk Communication
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Items that need manager or salesperson attention.
+                </p>
+
+                <div className="mt-4 space-y-3">
+                  {atRiskCommunicationItems.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+                      No communication risk items right now.
+                    </div>
+                  ) : (
+                    atRiskCommunicationItems.map((item) => (
+                      <Link
+                        key={item.id}
+                        href={item.href}
+                        className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-blue-200 hover:bg-blue-50"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-slate-900">
+                              {item.customer}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {item.detail}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-bold ${
+                              item.severity === "red"
+                                ? "bg-red-100 text-red-700"
+                                : item.severity === "orange"
+                                ? "bg-orange-100 text-orange-700"
+                                : "bg-blue-100 text-blue-700"
+                            }`}
+                          >
+                            {item.label}
+                          </span>
+                        </div>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {!isFinanceDashboard && (
           <>
             <div className="grid gap-6 lg:grid-cols-3">
@@ -1088,5 +1517,60 @@ export default function Home() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+
+function CommunicationMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "orange" | "red" | "blue" | "green" | "purple" | "slate";
+}) {
+  const styles: Record<
+    typeof tone,
+    {
+      box: string;
+      text: string;
+    }
+  > = {
+    orange: {
+      box: "bg-orange-50",
+      text: "text-orange-800",
+    },
+    red: {
+      box: "bg-red-50",
+      text: "text-red-800",
+    },
+    blue: {
+      box: "bg-blue-50",
+      text: "text-blue-800",
+    },
+    green: {
+      box: "bg-green-50",
+      text: "text-green-800",
+    },
+    purple: {
+      box: "bg-purple-50",
+      text: "text-purple-800",
+    },
+    slate: {
+      box: "bg-slate-50",
+      text: "text-slate-800",
+    },
+  };
+
+  return (
+    <div className={`rounded-xl p-4 ${styles[tone].box}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className={`mt-2 text-3xl font-extrabold ${styles[tone].text}`}>
+        {value}
+      </p>
+    </div>
   );
 }

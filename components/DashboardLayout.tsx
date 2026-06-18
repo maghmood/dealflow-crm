@@ -13,7 +13,7 @@ type NotificationItem = {
   message: string;
   href: string;
   severity: "red" | "orange" | "blue" | "green";
-  source: "task" | "whatsapp";
+  source: "task" | "whatsapp" | "communication";
 };
 
 type Company = {
@@ -146,11 +146,31 @@ export default function DashboardLayout({
     .or("unread_count.gt.0,waiting_for_response.eq.true")
     .order("last_message_at", { ascending: false });
 
+  let communicationQuery = supabase
+    .from("communication_logs")
+    .select(
+      "id, lead_id, channel, send_status, customer_name, created_by_id, created_by_name, created_at, resolved_at"
+    )
+    .eq("company_id", profile.company_id)
+    .is("resolved_at", null)
+    .in("send_status", [
+      "Pending Outcome",
+      "Sent Manually",
+      "Follow-up Created",
+    ])
+    .order("created_at", { ascending: false })
+    .limit(20);
+
   if (profile.role === "Sales") {
     taskQuery = taskQuery.eq("assigned_user_id", profile.id);
 
     whatsappQuery = whatsappQuery.eq(
       "assigned_user_id",
+      profile.id
+    );
+
+    communicationQuery = communicationQuery.eq(
+      "created_by_id",
       profile.id
     );
   }
@@ -165,11 +185,13 @@ export default function DashboardLayout({
      * Force an empty WhatsApp result for this role.
      */
     whatsappQuery = whatsappQuery.eq("id", -1);
+    communicationQuery = communicationQuery.eq("id", -1);
   }
 
-  const [taskResult, whatsappResult] = await Promise.all([
+  const [taskResult, whatsappResult, communicationResult] = await Promise.all([
     taskQuery,
     whatsappQuery,
+    communicationQuery,
   ]);
 
   const items: NotificationItem[] = [];
@@ -285,6 +307,32 @@ export default function DashboardLayout({
     });
 
     items.push(...whatsappItems);
+  }
+
+  if (communicationResult.error) {
+    console.error(
+      "Error loading communication notifications:",
+      communicationResult.error.message
+    );
+  } else {
+    const communicationItems: NotificationItem[] = (
+      communicationResult.data || []
+    ).map((log: any) => {
+      const customerName =
+        log.customer_name ||
+        (log.lead_id ? `Lead #${log.lead_id}` : "Customer");
+
+      return {
+        id: `communication-${log.id}`,
+        title: `${log.channel || "Communication"} Outcome Pending`,
+        message: `${customerName} • ${log.created_by_name || "User"} has not resolved this communication action.`,
+        href: log.lead_id ? `/leads/${log.lead_id}` : "/tasks",
+        severity: "orange",
+        source: "communication",
+      };
+    });
+
+    items.push(...communicationItems);
   }
 
   setNotifications(items);
@@ -427,9 +475,45 @@ useEffect(() => {
       }
     });
 
+  const communicationNotificationChannel = supabase
+    .channel(
+      `layout-communication-notifications-${profile.company_id}-${profile.id}`
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "communication_logs",
+        filter: `company_id=eq.${profile.company_id}`,
+      },
+      () => {
+        void fetchNotifications();
+      }
+    )
+    .subscribe((status, error) => {
+      if (error) {
+        console.error(
+          "Communication notification Realtime error:",
+          error
+        );
+      }
+
+      if (
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT"
+      ) {
+        console.error(
+          "Communication notification channel status:",
+          status
+        );
+      }
+    });
+
   return () => {
     supabase.removeChannel(taskNotificationChannel);
     supabase.removeChannel(whatsappNotificationChannel);
+    supabase.removeChannel(communicationNotificationChannel);
   };
 }, [
   profile?.company_id,
@@ -641,6 +725,8 @@ if (!profile || profile.status !== "Active") {
 >
   {notification.source === "whatsapp"
     ? "💬"
+    : notification.source === "communication"
+    ? "📣"
     : notification.severity === "red"
     ? "⚠️"
     : notification.severity === "orange"
@@ -679,7 +765,11 @@ if (!profile || profile.status !== "Active") {
 
                                   <div className="mt-4 flex items-center justify-between">
                                     <span className="text-xs text-slate-400">
-                                      Open linked lead
+                                      {notification.source === "task"
+                                        ? "Open task"
+                                        : notification.source === "communication"
+                                        ? "Open lead"
+                                        : "Open conversation"}
                                     </span>
 
                                     <span className="text-sm font-semibold text-blue-700">
