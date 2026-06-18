@@ -13,7 +13,7 @@ type NotificationItem = {
   message: string;
   href: string;
   severity: "red" | "orange" | "blue" | "green";
-  source: "task" | "whatsapp" | "communication";
+  source: "task" | "communication";
 };
 
 type Company = {
@@ -90,10 +90,6 @@ export default function DashboardLayout({
       ? [{ label: "Customers", href: "/customers" }]
       : []),
 
-      ...(canAccessRole(profile?.role, "whatsapp")
-  ? [{ label: "WhatsApp Inbox", href: "/whatsapp" }]
-  : []),
-
     ...(canAccessRole(profile?.role, "inventory")
       ? [{ label: "Inventory", href: "/inventory" }]
       : []),
@@ -136,16 +132,6 @@ export default function DashboardLayout({
     .neq("status", "Completed")
     .order("due_date", { ascending: true });
 
-  let whatsappQuery = supabase
-    .from("whatsapp_conversations")
-    .select(
-      "id, lead_id, customer_name, external_contact_name, last_message, last_message_at, unread_count, waiting_for_response, assigned_user_id, status"
-    )
-    .eq("company_id", profile.company_id)
-    .eq("status", "Open")
-    .or("unread_count.gt.0,waiting_for_response.eq.true")
-    .order("last_message_at", { ascending: false });
-
   let communicationQuery = supabase
     .from("communication_logs")
     .select(
@@ -164,11 +150,6 @@ export default function DashboardLayout({
   if (profile.role === "Sales") {
     taskQuery = taskQuery.eq("assigned_user_id", profile.id);
 
-    whatsappQuery = whatsappQuery.eq(
-      "assigned_user_id",
-      profile.id
-    );
-
     communicationQuery = communicationQuery.eq(
       "created_by_id",
       profile.id
@@ -180,17 +161,11 @@ export default function DashboardLayout({
       .eq("assigned_user_id", profile.id)
       .eq("task_scope", "Finance");
 
-    /*
-     * Finance does not use the general WhatsApp Inbox.
-     * Force an empty WhatsApp result for this role.
-     */
-    whatsappQuery = whatsappQuery.eq("id", -1);
     communicationQuery = communicationQuery.eq("id", -1);
   }
 
-  const [taskResult, whatsappResult, communicationResult] = await Promise.all([
+  const [taskResult, communicationResult] = await Promise.all([
     taskQuery,
-    whatsappQuery,
     communicationQuery,
   ]);
 
@@ -271,42 +246,6 @@ export default function DashboardLayout({
       .filter(Boolean) as NotificationItem[];
 
     items.push(...taskItems);
-  }
-
-  if (whatsappResult.error) {
-    console.error(
-      "Error loading WhatsApp notifications:",
-      whatsappResult.error.message
-    );
-  } else {
-    const whatsappItems: NotificationItem[] = (
-      whatsappResult.data || []
-    ).map((conversation: any) => {
-      const customerName =
-        conversation.customer_name ||
-        conversation.external_contact_name ||
-        "WhatsApp Customer";
-
-      const unreadCount =
-        Number(conversation.unread_count) || 0;
-
-      const isUnread = unreadCount > 0;
-
-      return {
-        id: `whatsapp-${conversation.id}`,
-        title: isUnread
-          ? `Unread WhatsApp${unreadCount > 1 ? ` (${unreadCount})` : ""}`
-          : "Customer Waiting",
-        message:
-          conversation.last_message ||
-          `${customerName} is waiting for a reply.`,
-        href: `/whatsapp?conversation=${conversation.id}`,
-        severity: isUnread ? "green" : "orange",
-        source: "whatsapp",
-      };
-    });
-
-    items.push(...whatsappItems);
   }
 
   if (communicationResult.error) {
@@ -440,41 +379,6 @@ useEffect(() => {
       }
     });
 
-  const whatsappNotificationChannel = supabase
-    .channel(
-      `layout-whatsapp-notifications-${profile.company_id}-${profile.id}`
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "whatsapp_conversations",
-        filter: `company_id=eq.${profile.company_id}`,
-      },
-      () => {
-        fetchNotifications();
-      }
-    )
-    .subscribe((status, error) => {
-      if (error) {
-        console.error(
-          "WhatsApp notification Realtime error:",
-          error
-        );
-      }
-
-      if (
-        status === "CHANNEL_ERROR" ||
-        status === "TIMED_OUT"
-      ) {
-        console.error(
-          "WhatsApp notification channel status:",
-          status
-        );
-      }
-    });
-
   const communicationNotificationChannel = supabase
     .channel(
       `layout-communication-notifications-${profile.company_id}-${profile.id}`
@@ -512,7 +416,6 @@ useEffect(() => {
 
   return () => {
     supabase.removeChannel(taskNotificationChannel);
-    supabase.removeChannel(whatsappNotificationChannel);
     supabase.removeChannel(communicationNotificationChannel);
   };
 }, [
@@ -677,7 +580,7 @@ if (!profile || profile.status !== "Active") {
                           </h3>
 
                           <p className="mt-1 text-sm text-slate-500">
-  Tasks, follow-ups and customer messages needing attention
+  Tasks and communication outcomes needing attention
 </p>
                         </div>
 

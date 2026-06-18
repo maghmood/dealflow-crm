@@ -1,6 +1,6 @@
 "use client";
 import PageAccessGuard from "@/components/PageAccessGuard";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -98,14 +98,6 @@ type CommunicationLog = {
   created_at: string;
   sent_at: string | null;
   resolved_at: string | null;
-};
-
-type WhatsAppDbMessage = {
-  id: number;
-  sender_type: "customer" | "user";
-  sender_name: string | null;
-  message: string;
-  created_at: string;
 };
 
 type FinanceDocument = {
@@ -519,8 +511,6 @@ export default function LeadDetailPage() {
 const canChooseTaskAssignee =
   profile?.role === "Admin" ||
   profile?.role === "Manager";
-  const whatsappSectionRef = useRef<HTMLDivElement | null>(null);
-  const whatsappInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [leadTasks, setLeadTasks] = useState<LeadTask[]>([]);
   const [salesUsers, setSalesUsers] = useState<SalesUser[]>([]);
@@ -564,12 +554,6 @@ const canChooseTaskAssignee =
   >("");
   const [showVehicleLinkModal, setShowVehicleLinkModal] = useState(false);
   const [linkingVehicle, setLinkingVehicle] = useState(false);
-
-  const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppDbMessage[]>(
-    []
-  );
-  const [whatsappInput, setWhatsappInput] = useState("");
-  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
 
 const [showCallModal, setShowCallModal] = useState(false);
 const [callOutcome, setCallOutcome] = useState("");
@@ -1130,221 +1114,6 @@ async function linkInventoryVehicleToLead() {
   );
 }
 
-  async function fetchWhatsappMessages() {
-    if (!profile?.company_id) return;
-
-    const { data, error } = await supabase
-      .from("whatsapp_messages")
-      .select("*")
-      .eq("lead_id", leadId)
-      .eq("company_id", profile.company_id)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("Error loading WhatsApp messages:", error.message);
-      setWhatsappMessages([]);
-      return;
-    }
-
-    setWhatsappMessages(Array.isArray(data) ? data : []);
-  }
-
-  async function sendWhatsappMessage() {
-  if (!lead || !profile?.company_id) return;
-
-  const to = normalizePhone(lead.phone);
-
-  if (!to) {
-    alert("Customer phone number is missing.");
-    return;
-  }
-
-  if (!whatsappInput.trim()) {
-    alert("Please type a WhatsApp message.");
-    return;
-  }
-
-  setSendingWhatsapp(true);
-
-  const messageToSend = whatsappInput.trim();
-
-  try {
-   const {
-  data: sessionData,
-  error: sessionError,
-} = await supabase.auth.getSession();
-
-if (sessionError || !sessionData.session?.access_token) {
-  alert("Your login session has expired. Please sign in again.");
-  return;
-}
-
-const response = await fetch("/api/whatsapp/send", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${sessionData.session.access_token}`,
-  },
-  body: JSON.stringify({
-    leadId: lead.id,
-    message: messageToSend,
-    mode: "text",
-  }),
-});
-
-    const result = await response.json();
-    const verifiedRecipient =
-  result?.recipient || normalizePhone(lead.phone);
-
-    if (!response.ok) {
-      alert(JSON.stringify(result, null, 2));
-      return;
-    }
-
-    const metaMessageId =
-      result?.data?.messages?.[0]?.id || null;
-
-    const messageDate = new Date().toISOString();
-
-    const { data: existingConversation, error: conversationCheckError } =
-      await supabase
-        .from("whatsapp_conversations")
-        .select("id, first_response_at, last_inbound_at")
-        .eq("company_id", profile.company_id)
-        .eq("lead_id", lead.id)
-        .maybeSingle();
-
-    if (conversationCheckError) {
-      alert(
-        "Message sent, but conversation lookup failed: " +
-          conversationCheckError.message
-      );
-      return;
-    }
-
-    let conversationId: number;
-
-    if (existingConversation) {
-      conversationId = existingConversation.id;
-
-      const firstResponseAt =
-        !existingConversation.first_response_at &&
-        existingConversation.last_inbound_at
-          ? messageDate
-          : existingConversation.first_response_at;
-
-      const { error: conversationUpdateError } = await supabase
-        .from("whatsapp_conversations")
-        .update({
-          customer_name: lead.customer,
-          customer_phone: verifiedRecipient,
-          assigned_user_id: lead.assigned_user_id,
-          assigned_user_name: lead.assigned_user_name,
-          last_message: messageToSend,
-          last_message_at: messageDate,
-          last_outbound_at: messageDate,
-          unread_count: 0,
-          waiting_for_response: false,
-          first_response_at: firstResponseAt,
-          last_read_at: messageDate,
-          status: "Open",
-          closed_at: null,
-          is_unmatched: false,
-        })
-        .eq("id", conversationId)
-        .eq("company_id", profile.company_id);
-
-      if (conversationUpdateError) {
-        alert(
-          "Message sent, but conversation update failed: " +
-            conversationUpdateError.message
-        );
-        return;
-      }
-    } else {
-      const { data: createdConversation, error: conversationCreateError } =
-        await supabase
-          .from("whatsapp_conversations")
-          .insert({
-            company_id: profile.company_id,
-            lead_id: lead.id,
-            customer_name: lead.customer,
-            customer_phone: verifiedRecipient,
-            assigned_user_id: lead.assigned_user_id,
-            assigned_user_name: lead.assigned_user_name,
-            last_message: messageToSend,
-            last_message_at: messageDate,
-            last_outbound_at: messageDate,
-            unread_count: 0,
-            waiting_for_response: false,
-            status: "Open",
-            is_unmatched: false,
-          })
-          .select("id")
-          .single();
-
-      if (conversationCreateError || !createdConversation) {
-        alert(
-          "Message sent, but conversation creation failed: " +
-            (conversationCreateError?.message || "Unknown error")
-        );
-        return;
-      }
-
-      conversationId = createdConversation.id;
-    }
-
-    const { data: savedMessage, error: saveError } = await supabase
-      .from("whatsapp_messages")
-      .insert({
-        company_id: profile.company_id,
-        lead_id: lead.id,
-        conversation_id: conversationId,
-        sender_type: "user",
-        sender_name:
-          profile.full_name || profile.email || "Unknown User",
-        direction: "Outbound",
-        message: messageToSend,
-        message_type: "text",
-        meta_message_id: metaMessageId,
-        delivery_status: "Sent",
-        created_at: messageDate,
-      })
-      .select("*")
-      .single();
-
-    if (saveError) {
-      alert(
-        "Message sent, but failed to save in CRM: " +
-          saveError.message
-      );
-      return;
-    }
-
-    await addActivity(
-      "WhatsApp Sent",
-      messageToSend,
-      "whatsapp",
-      "green"
-    );
-
-    if (savedMessage) {
-      setWhatsappMessages((current) => [
-        ...current,
-        savedMessage,
-      ]);
-    }
-
-    setWhatsappInput("");
-
-    alert("WhatsApp message sent successfully.");
-  } catch (error) {
-    console.error("Unexpected WhatsApp send error:", error);
-    alert("Unexpected error sending WhatsApp message.");
-  } finally {
-    setSendingWhatsapp(false);
-  }
-}
 
 
   async function fetchLinkedDealSnapshot() {
@@ -3552,7 +3321,6 @@ async function fetchAffordabilityAssessments() {
     fetchActivities();
     checkFinanceApplication();
     fetchSalesUsers();
-    fetchWhatsappMessages();
     fetchCallLogs();
     fetchDocuments();
     fetchLeadTasks();
@@ -5302,95 +5070,6 @@ async function fetchAffordabilityAssessments() {
                 ))
               )}
             </div>
-          </div>
-
-          <div
-            id="whatsapp"
-            ref={whatsappSectionRef}
-            className="rounded-xl bg-white p-6 shadow"
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
-                  WhatsApp API Dev Inbox
-                </h2>
-                <p className="text-sm text-slate-500">
-                  Legacy development inbox. Use Communication Assist above for MVP1 testing and tracking.
-                </p>
-              </div>
-
-              <a
-                href={`https://wa.me/${normalizePhone(lead.phone)}`}
-                target="_blank"
-                className="rounded-lg bg-green-100 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-200"
-              >
-                Open WhatsApp
-              </a>
-            </div>
-
-            <div className="mb-4 max-h-80 space-y-3 overflow-y-auto rounded-xl bg-green-50 p-4">
-              {whatsappMessages.length === 0 ? (
-                <p className="text-center text-sm text-slate-500">
-                  No WhatsApp messages logged yet.
-                </p>
-              ) : (
-                whatsappMessages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${
-                      msg.sender_type === "customer"
-                        ? "justify-start"
-                        : "justify-end"
-                    }`}
-                  >
-                    <div
-                      className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow ${
-                        msg.sender_type === "customer"
-                          ? "bg-white text-slate-800"
-                          : "bg-green-600 text-white"
-                      }`}
-                    >
-                      <p>{msg.message}</p>
-                      <p
-                        className={`mt-1 text-right text-xs ${
-                          msg.sender_type === "customer"
-                            ? "text-slate-400"
-                            : "text-green-100"
-                        }`}
-                      >
-                        {msg.created_at
-                          ? new Date(msg.created_at).toLocaleString("en-ZA")
-                          : ""}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="flex gap-3">
-              <textarea
-                ref={whatsappInputRef}
-                value={whatsappInput}
-                onChange={(e) => setWhatsappInput(e.target.value)}
-                placeholder="Type WhatsApp message..."
-                className="min-h-20 flex-1 rounded-xl border border-slate-300 p-3 text-sm"
-              />
-
-              <button
-                onClick={sendWhatsappMessage}
-                disabled={sendingWhatsapp}
-                className="rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
-              >
-                {sendingWhatsapp ? "Sending..." : "Send"}
-              </button>
-            </div>
-
-            <p className="mt-3 text-xs text-slate-400">
-              Note: free-text WhatsApp messages require the customer to have
-              messaged the business number within the 24-hour window. Use Meta
-              templates for first contact.
-            </p>
           </div>
 
           <div className="rounded-xl bg-white p-6 shadow">
