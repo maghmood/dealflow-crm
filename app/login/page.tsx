@@ -29,8 +29,8 @@ function DealFlowMark() {
       </div>
 
       <div>
-        <h1 className="text-3xl font-black tracking-tight text-slate-950">
-          Deal<span className="text-blue-700">Flow</span>
+        <h1 className="text-3xl font-black tracking-tight text-blue-700">
+          DealFlow
         </h1>
         <p className="text-sm font-medium text-slate-500">
           Drive your sales forward
