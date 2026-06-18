@@ -85,6 +85,46 @@ type DealDocument = {
   created_at: string | null;
 };
 
+type DealLeadContact = {
+  id: number;
+  customer: string | null;
+  phone: string | null;
+  email: string | null;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
+  last_contacted_at?: string | null;
+  last_contacted_by_id?: number | null;
+  last_contacted_by_name?: string | null;
+  last_contact_method?: string | null;
+  last_contact_outcome?: string | null;
+};
+
+type CommunicationLog = {
+  id: number;
+  company_id: number;
+  lead_id: number;
+  deal_id: number | null;
+  finance_application_id: number | null;
+  channel: string;
+  direction: string;
+  template_key: string | null;
+  subject: string | null;
+  message_body: string | null;
+  outcome: string | null;
+  summary: string | null;
+  send_status: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_email: string | null;
+  created_by_id: number | null;
+  created_by_name: string | null;
+  follow_up_task_id: number | null;
+  created_at: string;
+  sent_at: string | null;
+  resolved_at: string | null;
+};
+
+
 const DEAL_STAGES = [
   "Draft",
   "Offer Sent",
@@ -251,6 +291,125 @@ function calculateNetDealValue(deal: Deal | null) {
   return sale + extras - discount - tradeIn + settlement;
 }
 
+
+const COMMUNICATION_TEMPLATES = [
+  { key: "follow_up", label: "Follow-up" },
+  { key: "finance_documents_request", label: "Finance documents request" },
+  { key: "finance_submitted_update", label: "Finance submitted update" },
+  { key: "bank_approval_received", label: "Bank approval received" },
+  { key: "vehicle_offer", label: "Vehicle offer" },
+  { key: "delivery_confirmation", label: "Delivery confirmation" },
+  { key: "custom", label: "Custom message" },
+];
+
+const COMMUNICATION_OUTCOMES = [
+  "Sent",
+  "Not Sent",
+  "Customer Replied",
+  "No Answer",
+  "Interested",
+  "Not Interested",
+  "Documents Sent",
+  "Documents Requested",
+  "Callback Requested",
+  "Delivery Confirmed",
+  "Other",
+];
+
+function communicationStatusBadge(status: string | null) {
+  const value = status || "Pending Outcome";
+
+  const styles: Record<string, string> = {
+    "Pending Outcome": "bg-orange-100 text-orange-700",
+    "Sent Manually": "bg-green-100 text-green-700",
+    "Not Sent": "bg-slate-100 text-slate-700",
+    "Customer Replied": "bg-blue-100 text-blue-700",
+    "No Answer": "bg-red-100 text-red-700",
+    "Follow-up Created": "bg-purple-100 text-purple-700",
+    Closed: "bg-slate-100 text-slate-700",
+  };
+
+  return styles[value] || "bg-slate-100 text-slate-700";
+}
+
+function communicationChannelIcon(channel: string | null) {
+  if (channel === "WhatsApp") return "💬";
+  if (channel === "Email") return "✉️";
+  if (channel === "Call") return "📞";
+  return "📝";
+}
+
+function normalizePhoneForCommunication(value: string | null | undefined) {
+  if (!value) return "";
+
+  let cleaned = value.replace(/\D/g, "");
+
+  if (cleaned.startsWith("0")) {
+    cleaned = `27${cleaned.slice(1)}`;
+  }
+
+  if (cleaned.length === 9 && !cleaned.startsWith("27")) {
+    cleaned = `27${cleaned}`;
+  }
+
+  return cleaned;
+}
+
+function buildCommunicationTemplate(args: {
+  templateKey: string;
+  channel: "WhatsApp" | "Email";
+  customerName: string | null;
+  vehicleName: string | null;
+  salespersonName: string;
+  selectedBankName?: string | null;
+  monthlyInstallment?: number | null;
+  deliveryDate?: string | null;
+}) {
+  const customerFirstName =
+    (args.customerName || "there").split(" ")[0] || "there";
+  const vehicle = args.vehicleName || "the vehicle";
+
+  let subject = `DealFlow update for ${args.customerName || "customer"}`;
+  let body = "";
+
+  if (args.templateKey === "finance_documents_request") {
+    subject = "Finance documents required";
+    body = `Hi ${customerFirstName}, to continue with your finance application, please send your ID copy, proof of address, latest payslip and latest bank statements.`;
+  } else if (args.templateKey === "finance_submitted_update") {
+    subject = "Finance application submitted";
+    body = `Hi ${customerFirstName}, your finance application for ${vehicle} has been submitted. I will update you as soon as we receive feedback.`;
+  } else if (args.templateKey === "bank_approval_received") {
+    subject = "Finance approval received";
+    body = `Hi ${customerFirstName}, good news. We received finance feedback${args.selectedBankName ? ` from ${args.selectedBankName}` : ""}${args.monthlyInstallment ? ` with an estimated installment of ${formatRand(args.monthlyInstallment)}` : ""}. Please let me know when you are available to discuss the offer.`;
+  } else if (args.templateKey === "vehicle_offer") {
+    subject = `Vehicle offer: ${vehicle}`;
+    body = `Hi ${customerFirstName}, I wanted to share the details for ${vehicle}. Please let me know if you would like to proceed or if you want to look at another option.`;
+  } else if (args.templateKey === "delivery_confirmation") {
+    subject = "Delivery confirmation";
+    body = `Hi ${customerFirstName}, your delivery for ${vehicle}${args.deliveryDate ? ` is planned for ${formatDateTime(args.deliveryDate)}` : " is being arranged"}. Please confirm if this still suits you.`;
+  } else if (args.templateKey === "follow_up") {
+    subject = "Follow-up";
+    body = `Hi ${customerFirstName}, I am following up on your Deal for ${vehicle}. Please let me know if you need any further assistance.`;
+  } else {
+    subject = "Message from the dealership";
+    body = `Hi ${customerFirstName}, `;
+  }
+
+  if (args.channel === "Email") {
+    body = `${body}\n\nRegards,\n${args.salespersonName}`;
+  }
+
+  return { subject, body };
+}
+
+function buildDateTimeLocalTomorrowMorning() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(9, 0, 0, 0);
+
+  return `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}T09:00`;
+}
+
 export default function DealDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -259,6 +418,27 @@ export default function DealDetailPage() {
   const dealId = Number(params.id);
 
   const [deal, setDeal] = useState<Deal | null>(null);
+
+const [leadContact, setLeadContact] = useState<DealLeadContact | null>(null);
+const [communicationLogs, setCommunicationLogs] = useState<CommunicationLog[]>([]);
+const [showCommunicationModal, setShowCommunicationModal] = useState(false);
+const [communicationChannel, setCommunicationChannel] =
+  useState<"WhatsApp" | "Email">("WhatsApp");
+const [communicationTemplateKey, setCommunicationTemplateKey] =
+  useState("follow_up");
+const [communicationSubject, setCommunicationSubject] = useState("");
+const [communicationMessage, setCommunicationMessage] = useState("");
+const [savingCommunication, setSavingCommunication] = useState(false);
+const [activeCommunicationLog, setActiveCommunicationLog] =
+  useState<CommunicationLog | null>(null);
+const [showCommunicationOutcomeModal, setShowCommunicationOutcomeModal] =
+  useState(false);
+const [communicationOutcome, setCommunicationOutcome] = useState("Sent");
+const [communicationSummary, setCommunicationSummary] = useState("");
+const [communicationFollowUpRequired, setCommunicationFollowUpRequired] =
+  useState(true);
+const [communicationFollowUpDate, setCommunicationFollowUpDate] = useState("");
+
 const [activities, setActivities] = useState<DealActivity[]>([]);
 const [checklistItems, setChecklistItems] = useState<DealChecklistItem[]>([]);
 const [documents, setDocuments] = useState<DealDocument[]>([]);
@@ -336,6 +516,13 @@ const [plannedDeliveryAt, setPlannedDeliveryAt] = useState("");
             .slice(0, 16)
         : ""
     );
+
+    if (data.lead_id) {
+      await fetchLeadContact(data.lead_id);
+    } else {
+      setLeadContact(null);
+    }
+
     setLoading(false);
   }
 
@@ -450,6 +637,7 @@ async function fetchDealDocuments() {
   fetchDealActivities();
   fetchChecklistItems();
   fetchDealDocuments();
+  fetchCommunicationLogs();
 }, [profile?.company_id, profile?.role, profile?.id, dealId]);
 
   async function addDealActivity(
@@ -493,6 +681,462 @@ async function fetchDealDocuments() {
 
     if (error) {
       console.error("Error saving lead activity:", error.message);
+    }
+  }
+
+
+
+  async function fetchLeadContact(leadId: number) {
+    if (!profile?.company_id) return;
+
+    const { data, error } = await supabase
+      .from("leads")
+      .select(
+        "id, customer, phone, email, assigned_user_id, assigned_user_name, last_contacted_at, last_contacted_by_id, last_contacted_by_name, last_contact_method, last_contact_outcome"
+      )
+      .eq("company_id", profile.company_id)
+      .eq("id", leadId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error loading deal lead contact:", error.message);
+      setLeadContact(null);
+      return;
+    }
+
+    setLeadContact((data as DealLeadContact | null) || null);
+  }
+
+  async function fetchCommunicationLogs() {
+    if (!profile?.company_id || !dealId) return;
+
+    const { data, error } = await supabase
+      .from("communication_logs")
+      .select("*")
+      .eq("company_id", profile.company_id)
+      .eq("deal_id", dealId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading deal communication logs:", error.message);
+      setCommunicationLogs([]);
+      return;
+    }
+
+    setCommunicationLogs(Array.isArray(data) ? data : []);
+  }
+
+  function openCommunicationModal(
+    channel: "WhatsApp" | "Email",
+    templateKey = "follow_up"
+  ) {
+    if (!deal) return;
+
+    const template = buildCommunicationTemplate({
+      templateKey,
+      channel,
+      customerName: deal.customer_name || leadContact?.customer || null,
+      vehicleName: deal.vehicle_name,
+      salespersonName:
+        profile?.full_name ||
+        profile?.email ||
+        leadContact?.assigned_user_name ||
+        "Sales",
+      selectedBankName: deal.selected_bank_name,
+      monthlyInstallment: deal.finance_monthly_installment,
+      deliveryDate: deal.planned_delivery_at,
+    });
+
+    setCommunicationChannel(channel);
+    setCommunicationTemplateKey(templateKey);
+    setCommunicationSubject(template.subject);
+    setCommunicationMessage(template.body);
+    setShowCommunicationModal(true);
+  }
+
+  function handleCommunicationTemplateChange(templateKey: string) {
+    if (!deal) return;
+
+    setCommunicationTemplateKey(templateKey);
+
+    const template = buildCommunicationTemplate({
+      templateKey,
+      channel: communicationChannel,
+      customerName: deal.customer_name || leadContact?.customer || null,
+      vehicleName: deal.vehicle_name,
+      salespersonName:
+        profile?.full_name ||
+        profile?.email ||
+        leadContact?.assigned_user_name ||
+        "Sales",
+      selectedBankName: deal.selected_bank_name,
+      monthlyInstallment: deal.finance_monthly_installment,
+      deliveryDate: deal.planned_delivery_at,
+    });
+
+    setCommunicationSubject(template.subject);
+    setCommunicationMessage(template.body);
+  }
+
+  async function startCommunicationAction() {
+    if (!deal || !deal.lead_id || !profile?.company_id || !profile?.id) return;
+
+    const customerPhone = normalizePhoneForCommunication(leadContact?.phone);
+    const customerEmail = leadContact?.email || "";
+
+    if (communicationChannel === "WhatsApp" && !customerPhone) {
+      alert("Customer phone number is missing on the linked Lead.");
+      return;
+    }
+
+    if (communicationChannel === "Email" && !customerEmail) {
+      alert("Customer email address is missing on the linked Lead.");
+      return;
+    }
+
+    if (!communicationMessage.trim()) {
+      alert("Please enter a message.");
+      return;
+    }
+
+    setSavingCommunication(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("communication_logs")
+        .insert({
+          company_id: profile.company_id,
+          lead_id: deal.lead_id,
+          deal_id: deal.id,
+          finance_application_id: null,
+          channel: communicationChannel,
+          direction: "Outbound",
+          template_key: communicationTemplateKey,
+          subject:
+            communicationChannel === "Email"
+              ? communicationSubject.trim()
+              : null,
+          message_body: communicationMessage.trim(),
+          outcome: null,
+          summary: null,
+          send_status: "Pending Outcome",
+          customer_name: deal.customer_name || leadContact?.customer,
+          customer_phone: leadContact?.phone,
+          customer_email: leadContact?.email,
+          created_by_id: profile.id,
+          created_by_name:
+            profile.full_name || profile.email || "Unknown User",
+        })
+        .select("*")
+        .single();
+
+      if (error || !data) {
+        alert(
+          "Could not create the communication action: " +
+            (error?.message || "Unknown error")
+        );
+        return;
+      }
+
+      setActiveCommunicationLog(data);
+      setCommunicationOutcome("Sent");
+      setCommunicationSummary("");
+      setCommunicationFollowUpRequired(true);
+      setCommunicationFollowUpDate(buildDateTimeLocalTomorrowMorning());
+
+      if (communicationChannel === "WhatsApp") {
+        window.location.href = `whatsapp://send?phone=${customerPhone}&text=${encodeURIComponent(
+          communicationMessage.trim()
+        )}`;
+      } else {
+        window.location.href = `mailto:${encodeURIComponent(
+          customerEmail
+        )}?subject=${encodeURIComponent(
+          communicationSubject.trim() || "DealFlow message"
+        )}&body=${encodeURIComponent(communicationMessage.trim())}`;
+      }
+
+      await addDealActivity(
+        `${communicationChannel} Action Started`,
+        [
+          `Template: ${COMMUNICATION_TEMPLATES.find((item) => item.key === communicationTemplateKey)?.label || communicationTemplateKey}`,
+          "Status: Pending Outcome",
+          communicationChannel === "Email"
+            ? `Subject: ${communicationSubject.trim() || "-"}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" • "),
+        "orange"
+      );
+
+      await addLeadActivity(
+        `${communicationChannel} Action Started`,
+        `Deal #${deal.id} communication action started. Status: Pending Outcome.`,
+        "orange"
+      );
+
+      setShowCommunicationModal(false);
+      setShowCommunicationOutcomeModal(true);
+      await fetchCommunicationLogs();
+      await fetchDealActivities();
+    } finally {
+      setSavingCommunication(false);
+    }
+  }
+
+  async function resolveCommunicationOutcome() {
+    if (!activeCommunicationLog || !deal || !deal.lead_id || !profile?.company_id || !profile?.id) {
+      return;
+    }
+
+    if (!communicationOutcome) {
+      alert("Please select an outcome.");
+      return;
+    }
+
+    if (communicationFollowUpRequired && !communicationFollowUpDate) {
+      alert("Please select a follow-up date.");
+      return;
+    }
+
+    setSavingCommunication(true);
+
+    try {
+      let followUpTaskId: number | null = null;
+      let finalStatus =
+        communicationOutcome === "Sent"
+          ? "Sent Manually"
+          : communicationOutcome === "No Answer"
+          ? "No Answer"
+          : communicationOutcome === "Customer Replied"
+          ? "Customer Replied"
+          : communicationOutcome === "Not Sent"
+          ? "Not Sent"
+          : "Closed";
+
+      if (communicationFollowUpRequired && communicationFollowUpDate) {
+        const { data, error } = await supabase.rpc(
+          "upsert_workflow_task",
+          {
+            p_lead_id: deal.lead_id,
+            p_assigned_user_id:
+              leadContact?.assigned_user_id || deal.assigned_user_id || profile.id,
+            p_title:
+              `Follow up after ${activeCommunicationLog.channel}: ${deal.customer_name || "Customer"}`,
+            p_description:
+              communicationSummary.trim() ||
+              `Follow up on ${activeCommunicationLog.channel} communication for Deal #${deal.id}.`,
+            p_task_type: "Follow-up",
+            p_priority: "Medium",
+            p_due_date: new Date(communicationFollowUpDate).toISOString(),
+            p_task_scope: "Sales",
+            p_task_reason:
+              activeCommunicationLog.channel === "WhatsApp"
+                ? "WHATSAPP_FOLLOW_UP"
+                : activeCommunicationLog.channel === "Email"
+                ? "EMAIL_FOLLOW_UP"
+                : "COMMUNICATION_FOLLOW_UP",
+            p_related_record_type: "lead",
+            p_related_record_id: deal.lead_id,
+            p_use_dedupe: true,
+          }
+        );
+
+        if (error) {
+          alert(
+            "Outcome saved failed because follow-up task could not be created: " +
+              error.message
+          );
+          return;
+        }
+
+        const result = Array.isArray(data) ? data[0] : data;
+        followUpTaskId = result?.task_id || null;
+        finalStatus = "Follow-up Created";
+      }
+
+      const { error } = await supabase
+        .from("communication_logs")
+        .update({
+          outcome: communicationOutcome,
+          summary: communicationSummary.trim() || null,
+          send_status: finalStatus,
+          follow_up_task_id: followUpTaskId,
+          sent_at:
+            finalStatus === "Sent Manually" ||
+            finalStatus === "Follow-up Created"
+              ? new Date().toISOString()
+              : activeCommunicationLog.sent_at,
+          resolved_at: new Date().toISOString(),
+        })
+        .eq("id", activeCommunicationLog.id)
+        .eq("company_id", profile.company_id);
+
+      if (error) {
+        alert("Could not update communication outcome: " + error.message);
+        return;
+      }
+
+      await addDealActivity(
+        `${activeCommunicationLog.channel} Outcome Logged`,
+        [
+          `Outcome: ${communicationOutcome}`,
+          communicationSummary.trim()
+            ? `Summary: ${communicationSummary.trim()}`
+            : null,
+          followUpTaskId
+            ? `Follow-up task created for ${new Date(
+                communicationFollowUpDate
+              ).toLocaleString("en-ZA")}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" • "),
+        finalStatus === "Not Sent" || finalStatus === "No Answer"
+          ? "orange"
+          : "green"
+      );
+
+      await addLeadActivity(
+        `${activeCommunicationLog.channel} Outcome Logged`,
+        `Deal #${deal.id} communication outcome: ${communicationOutcome}.`,
+        finalStatus === "Not Sent" || finalStatus === "No Answer"
+          ? "orange"
+          : "green"
+      );
+
+      await Promise.all([
+        fetchCommunicationLogs(),
+        fetchDeal(),
+        fetchDealActivities(),
+      ]);
+
+      window.dispatchEvent(new CustomEvent("dealflow-task-updated"));
+
+      setShowCommunicationOutcomeModal(false);
+      setActiveCommunicationLog(null);
+      setCommunicationOutcome("Sent");
+      setCommunicationSummary("");
+      setCommunicationFollowUpRequired(false);
+      setCommunicationFollowUpDate("");
+    } finally {
+      setSavingCommunication(false);
+    }
+  }
+
+  function openCommunicationFallback() {
+    if (!activeCommunicationLog) return;
+
+    if (activeCommunicationLog.channel === "WhatsApp") {
+      const phone = normalizePhoneForCommunication(activeCommunicationLog.customer_phone);
+
+      if (!phone) return;
+
+      window.open(
+        `https://wa.me/${phone}?text=${encodeURIComponent(
+          activeCommunicationLog.message_body || ""
+        )}`,
+        "_blank"
+      );
+      return;
+    }
+
+    if (activeCommunicationLog.channel === "Email") {
+      window.location.href = `mailto:${encodeURIComponent(
+        activeCommunicationLog.customer_email || ""
+      )}?subject=${encodeURIComponent(
+        activeCommunicationLog.subject || "DealFlow message"
+      )}&body=${encodeURIComponent(activeCommunicationLog.message_body || "")}`;
+    }
+  }
+
+  function openManualOutcomeModal() {
+    setActiveCommunicationLog(null);
+    setCommunicationChannel("WhatsApp");
+    setCommunicationTemplateKey("manual_outcome");
+    setCommunicationSubject("");
+    setCommunicationMessage("");
+    setCommunicationOutcome("Customer Replied");
+    setCommunicationSummary("");
+    setCommunicationFollowUpRequired(false);
+    setCommunicationFollowUpDate(buildDateTimeLocalTomorrowMorning());
+    setShowCommunicationOutcomeModal(true);
+  }
+
+  async function saveManualCommunicationOutcome() {
+    if (!deal || !deal.lead_id || !profile?.company_id || !profile?.id) return;
+
+    if (!communicationOutcome) {
+      alert("Please select an outcome.");
+      return;
+    }
+
+    setSavingCommunication(true);
+
+    try {
+      const { error } = await supabase
+        .from("communication_logs")
+        .insert({
+          company_id: profile.company_id,
+          lead_id: deal.lead_id,
+          deal_id: deal.id,
+          finance_application_id: null,
+          channel: communicationChannel,
+          direction: "Inbound",
+          template_key: "manual_outcome",
+          subject:
+            communicationChannel === "Email"
+              ? communicationSubject.trim() || null
+              : null,
+          message_body: communicationMessage.trim() || null,
+          outcome: communicationOutcome,
+          summary: communicationSummary.trim() || null,
+          send_status: "Closed",
+          customer_name: deal.customer_name || leadContact?.customer,
+          customer_phone: leadContact?.phone,
+          customer_email: leadContact?.email,
+          created_by_id: profile.id,
+          created_by_name:
+            profile.full_name || profile.email || "Unknown User",
+          sent_at: new Date().toISOString(),
+          resolved_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        alert("Could not save communication outcome: " + error.message);
+        return;
+      }
+
+      await addDealActivity(
+        `${communicationChannel} Outcome Logged`,
+        [
+          `Outcome: ${communicationOutcome}`,
+          communicationSummary.trim()
+            ? `Summary: ${communicationSummary.trim()}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" • "),
+        "green"
+      );
+
+      await addLeadActivity(
+        `${communicationChannel} Outcome Logged`,
+        `Deal #${deal.id} manual communication outcome: ${communicationOutcome}.`,
+        "green"
+      );
+
+      await Promise.all([
+        fetchCommunicationLogs(),
+        fetchDealActivities(),
+      ]);
+
+      setShowCommunicationOutcomeModal(false);
+      setCommunicationOutcome("Sent");
+      setCommunicationSummary("");
+    } finally {
+      setSavingCommunication(false);
     }
   }
 
@@ -928,6 +1572,115 @@ return (
             value={`${completedChecklistItems}/${checklistItems.length}`}
           />
           <MetricCard label="Progress" value={`${checklistProgress}%`} />
+        </div>
+
+
+
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">
+                Deal Communication Assist
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Send deal-stage WhatsApp or email messages and track pending outcomes.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => openCommunicationModal("WhatsApp", "follow_up")}
+                disabled={!deal.lead_id}
+                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Send WhatsApp
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openCommunicationModal("Email", "follow_up")}
+                disabled={!deal.lead_id}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Send Email
+              </button>
+
+              <button
+                type="button"
+                onClick={openManualOutcomeModal}
+                disabled={!deal.lead_id}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Log Reply / Outcome
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-sm font-bold text-slate-800">
+                Last Contact
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Info label="Method" value={leadContact?.last_contact_method || "Not captured"} />
+                <Info label="Outcome" value={leadContact?.last_contact_outcome || "Not captured"} />
+                <Info label="By" value={leadContact?.last_contacted_by_name || "Not captured"} />
+                <Info label="When" value={formatDateTime(leadContact?.last_contacted_at)} />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-slate-800">
+                  Recent Deal Communication
+                </p>
+                <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700">
+                  {
+                    communicationLogs.filter(
+                      (log) => (log.send_status || "") === "Pending Outcome"
+                    ).length
+                  } Pending
+                </span>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                {communicationLogs.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">
+                    No deal communication logged yet.
+                  </p>
+                ) : (
+                  communicationLogs.slice(0, 5).map((log) => (
+                    <div
+                      key={log.id}
+                      className="rounded-xl border border-slate-200 bg-white p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">
+                            {communicationChannelIcon(log.channel)} {log.channel} • {log.direction}
+                          </p>
+                          <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                            {log.summary || log.subject || log.message_body || "No summary captured"}
+                          </p>
+                        </div>
+                        <span
+                          className={`${communicationStatusBadge(
+                            log.send_status
+                          )} rounded-full px-2 py-1 text-[11px] font-bold`}
+                        >
+                          {log.send_status || "Pending Outcome"}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-[11px] text-slate-400">
+                        {formatDateTime(log.created_at)} • {log.created_by_name || "Unknown user"}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
@@ -1657,6 +2410,217 @@ return (
           )}
         </div>
       </div>
+
+
+{showCommunicationModal && deal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+      <h2 className="text-xl font-bold text-slate-900">
+        {communicationChannel} Assist
+      </h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Prepare the message, open the external app, then resolve the pending outcome in DealFlow.
+      </p>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="text-sm font-semibold text-slate-600">Channel</label>
+          <select
+            value={communicationChannel}
+            onChange={(event) => {
+              const channel = event.target.value as "WhatsApp" | "Email";
+              setCommunicationChannel(channel);
+              const template = buildCommunicationTemplate({
+                templateKey: communicationTemplateKey,
+                channel,
+                customerName: deal.customer_name || leadContact?.customer || null,
+                vehicleName: deal.vehicle_name,
+                salespersonName: profile?.full_name || profile?.email || leadContact?.assigned_user_name || "Sales",
+                selectedBankName: deal.selected_bank_name,
+                monthlyInstallment: deal.finance_monthly_installment,
+                deliveryDate: deal.planned_delivery_at,
+              });
+              setCommunicationSubject(template.subject);
+              setCommunicationMessage(template.body);
+            }}
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          >
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Email">Email</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-slate-600">Template</label>
+          <select
+            value={communicationTemplateKey}
+            onChange={(event) => handleCommunicationTemplateChange(event.target.value)}
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          >
+            {COMMUNICATION_TEMPLATES.map((template) => (
+              <option key={template.key} value={template.key}>
+                {template.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {communicationChannel === "Email" && (
+        <div className="mt-4">
+          <label className="text-sm font-semibold text-slate-600">Subject</label>
+          <input
+            value={communicationSubject}
+            onChange={(event) => setCommunicationSubject(event.target.value)}
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          />
+        </div>
+      )}
+
+      <div className="mt-4">
+        <label className="text-sm font-semibold text-slate-600">Message</label>
+        <textarea
+          value={communicationMessage}
+          onChange={(event) => setCommunicationMessage(event.target.value)}
+          className="mt-1 min-h-40 w-full rounded-xl border border-slate-300 p-3"
+        />
+      </div>
+
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => setShowCommunicationModal(false)}
+          disabled={savingCommunication}
+          className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => void startCommunicationAction()}
+          disabled={savingCommunication}
+          className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
+        >
+          {savingCommunication ? "Opening..." : `Open ${communicationChannel}`}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showCommunicationOutcomeModal && deal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+      <h2 className="text-xl font-bold text-slate-900">
+        Resolve Communication Outcome
+      </h2>
+      <p className="mt-1 text-sm text-slate-500">
+        This keeps the Deal and linked Lead accurate even though the message was sent outside DealFlow.
+      </p>
+
+      {activeCommunicationLog && (
+        <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
+          Pending outcome for {activeCommunicationLog.channel}. If the app did not open, use the fallback below.
+          <button
+            type="button"
+            onClick={openCommunicationFallback}
+            className="ml-2 font-bold underline"
+          >
+            Open fallback
+          </button>
+        </div>
+      )}
+
+      {!activeCommunicationLog && (
+        <div className="mt-4">
+          <label className="text-sm font-semibold text-slate-600">Channel</label>
+          <select
+            value={communicationChannel}
+            onChange={(event) => setCommunicationChannel(event.target.value as "WhatsApp" | "Email")}
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          >
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Email">Email</option>
+          </select>
+        </div>
+      )}
+
+      <div className="mt-4">
+        <label className="text-sm font-semibold text-slate-600">Outcome</label>
+        <select
+          value={communicationOutcome}
+          onChange={(event) => setCommunicationOutcome(event.target.value)}
+          className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+        >
+          {COMMUNICATION_OUTCOMES.map((outcome) => (
+            <option key={outcome} value={outcome}>
+              {outcome}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mt-4">
+        <label className="text-sm font-semibold text-slate-600">Summary</label>
+        <textarea
+          value={communicationSummary}
+          onChange={(event) => setCommunicationSummary(event.target.value)}
+          placeholder="Example: Customer confirmed delivery date."
+          className="mt-1 min-h-28 w-full rounded-xl border border-slate-300 p-3"
+        />
+      </div>
+
+      {activeCommunicationLog && (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={communicationFollowUpRequired}
+              onChange={(event) => setCommunicationFollowUpRequired(event.target.checked)}
+            />
+            Create or update follow-up task
+          </label>
+
+          {communicationFollowUpRequired && (
+            <input
+              type="datetime-local"
+              value={communicationFollowUpDate}
+              onChange={(event) => setCommunicationFollowUpDate(event.target.value)}
+              className="mt-3 w-full rounded-xl border border-slate-300 bg-white p-3"
+            />
+          )}
+        </div>
+      )}
+
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            setShowCommunicationOutcomeModal(false);
+            setActiveCommunicationLog(null);
+          }}
+          disabled={savingCommunication}
+          className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            activeCommunicationLog
+              ? void resolveCommunicationOutcome()
+              : void saveManualCommunicationOutcome()
+          }
+          disabled={savingCommunication}
+          className="rounded-xl bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+        >
+          {savingCommunication ? "Saving..." : "Save Outcome"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
           </PageAccessGuard>
 
     </DashboardLayout>
