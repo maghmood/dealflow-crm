@@ -429,7 +429,7 @@ function communicationStatusBadge(status: string | null) {
 
 function buildCommunicationTemplate(args: {
   templateKey: string;
-  channel: "Message" | "Email";
+  channel: "WhatsApp" | "Email";
   lead: Lead;
   vehicleTitle: string;
   deal: LeadDealSnapshot | null;
@@ -564,7 +564,7 @@ const [savingCall, setSavingCall] = useState(false);
 const [communicationLogs, setCommunicationLogs] = useState<CommunicationLog[]>([]);
 const [showCommunicationModal, setShowCommunicationModal] = useState(false);
 const [communicationChannel, setCommunicationChannel] =
-  useState<"Message" | "Email">("Email");
+  useState<"WhatsApp" | "Email">("WhatsApp");
 const [communicationTemplateKey, setCommunicationTemplateKey] =
   useState("follow_up");
 const [communicationSubject, setCommunicationSubject] = useState("");
@@ -2743,7 +2743,7 @@ async function fetchAffordabilityAssessments() {
   }
 
   function openCommunicationModal(
-    channel: "Message" | "Email",
+    channel: "WhatsApp" | "Email",
     templateKey = "follow_up"
   ) {
     if (!lead) return;
@@ -2808,7 +2808,7 @@ async function fetchAffordabilityAssessments() {
     const customerPhone = normalizePhone(lead.phone);
     const customerEmail = lead.email || "";
 
-    if (communicationChannel === "Message" && !customerPhone) {
+    if (communicationChannel === "WhatsApp" && !customerPhone) {
       alert("Customer phone number is missing.");
       return;
     }
@@ -2875,12 +2875,21 @@ async function fetchAffordabilityAssessments() {
         `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}T09:00`
       );
 
-      if (communicationChannel === "Message") {
-        alert("Messaging channel is disabled for MVP1. Use Email Assist or Call instead.");
-        return;
-      }
+      if (communicationChannel === "WhatsApp") {
+        /*
+         * Use the WhatsApp app protocol first so desktop/mobile users with the
+         * WhatsApp app installed are not also forced through a browser tab.
+         *
+         * Browsers cannot reliably detect whether the WhatsApp desktop/mobile app
+         * is installed, so we do not auto-open a web fallback here. The outcome
+         * modal provides a manual WhatsApp Web fallback link if the app does not open.
+         */
+        const appUrl = `whatsapp://send?phone=${customerPhone}&text=${encodeURIComponent(
+          communicationMessage.trim()
+        )}`;
 
-      {
+        window.location.href = appUrl;
+      } else {
         const mailto = `mailto:${encodeURIComponent(
           customerEmail
         )}?subject=${encodeURIComponent(
@@ -2965,14 +2974,14 @@ async function fetchAffordabilityAssessments() {
             p_due_date: new Date(communicationFollowUpDate).toISOString(),
             p_task_scope: "Sales",
             p_task_reason:
-              activeCommunicationLog.channel === "Message"
+              activeCommunicationLog.channel === "WhatsApp"
                 ? "WHATSAPP_FOLLOW_UP"
                 : activeCommunicationLog.channel === "Email"
                 ? "EMAIL_FOLLOW_UP"
                 : "COMMUNICATION_FOLLOW_UP",
             /*
              * Dedupe communication follow-up tasks at Lead + Channel level.
-             * A new Message or Email communication outcome should update/reopen
+             * A new WhatsApp or Email communication outcome should update/reopen
              * the existing matching follow-up task instead of creating duplicates.
              */
             p_related_record_type: "lead",
@@ -3540,11 +3549,18 @@ async function fetchAffordabilityAssessments() {
                   Communication Assist
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Track every customer email, call and manual outcome so follow-ups stay accountable.
+                  Track every customer contact attempt, even when WhatsApp, email or calls happen outside DealFlow.
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => openCommunicationModal("WhatsApp", "follow_up")}
+                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
+                >
+                  Send WhatsApp
+                </button>
 
                 <button
                   type="button"
@@ -3566,7 +3582,7 @@ async function fetchAffordabilityAssessments() {
                   type="button"
                   onClick={() => {
                     setActiveCommunicationLog(null);
-                    setCommunicationChannel("Email");
+                    setCommunicationChannel("WhatsApp");
                     setCommunicationOutcome("Customer Replied");
                     setCommunicationSubject("");
                     setCommunicationMessage("");
@@ -3624,7 +3640,7 @@ async function fetchAffordabilityAssessments() {
                   {communicationLogs.length}
                 </p>
                 <p className="text-xs text-blue-700">
-                  Email, call and manual outcomes
+                  WhatsApp, email, call and manual outcomes
                 </p>
               </div>
             </div>
@@ -3636,7 +3652,7 @@ async function fetchAffordabilityAssessments() {
                     No communication actions logged yet.
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
-                    Start with email, call or log an outcome manually.
+                    Start with WhatsApp, email, call or log an outcome manually.
                   </p>
                 </div>
               ) : (
@@ -3692,7 +3708,7 @@ async function fetchAffordabilityAssessments() {
                           onClick={() => {
                             setActiveCommunicationLog(log);
                             setCommunicationChannel(
-                              log.channel === "Email" ? "Email" : "Message"
+                              log.channel === "Email" ? "Email" : "WhatsApp"
                             );
                             setCommunicationOutcome("Sent");
                             setCommunicationSummary("");
@@ -3918,6 +3934,13 @@ async function fetchAffordabilityAssessments() {
 >
   Add Follow-Up Task
 </button>
+
+              <button
+                onClick={() => openCommunicationModal("WhatsApp", "follow_up")}
+                className="w-full rounded-lg bg-green-600 px-4 py-3 text-white hover:bg-green-500"
+              >
+                Send WhatsApp Assist
+              </button>
 
               <button
                 onClick={() => openCommunicationModal("Email", "follow_up")}
@@ -5510,7 +5533,7 @@ async function fetchAffordabilityAssessments() {
                 <select
                   value={communicationChannel}
                   onChange={(event) => {
-                    const channel = event.target.value as "Message" | "Email";
+                    const channel = event.target.value as "WhatsApp" | "Email";
                     setCommunicationChannel(channel);
 
                     if (lead) {
@@ -5539,6 +5562,7 @@ async function fetchAffordabilityAssessments() {
                   }}
                   className="mt-1 w-full rounded-lg border border-slate-300 p-3"
                 >
+                  <option>WhatsApp</option>
                   <option>Email</option>
                 </select>
               </div>
@@ -5613,7 +5637,11 @@ async function fetchAffordabilityAssessments() {
                 onClick={startCommunicationAction}
                 className="rounded-lg bg-slate-900 px-5 py-2 font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
               >
-                {savingCommunication ? "Starting..." : "Open Email and Track"}
+                {savingCommunication
+                  ? "Starting..."
+                  : communicationChannel === "WhatsApp"
+                  ? "Open WhatsApp and Track"
+                  : "Open Email and Track"}
               </button>
             </div>
           </div>
@@ -5631,7 +5659,7 @@ async function fetchAffordabilityAssessments() {
                     : "Log Reply / Outcome"}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {lead.customer} • {(activeCommunicationLog?.channel || communicationChannel) === "Message" ? "Message" : (activeCommunicationLog?.channel || communicationChannel)}
+                  {lead.customer} • {activeCommunicationLog?.channel || communicationChannel}
                 </p>
               </div>
 
@@ -5647,6 +5675,24 @@ async function fetchAffordabilityAssessments() {
                 ✕
               </button>
             </div>
+
+            {activeCommunicationLog?.channel === "WhatsApp" && (
+              <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                <p className="font-semibold">WhatsApp app opened?</p>
+                <p className="mt-1">
+                  DealFlow tried to open the WhatsApp desktop/mobile app directly. If the app did not open,
+                  use the fallback below.
+                </p>
+                <a
+                  href={`https://web.whatsapp.com/send?phone=${normalizePhone(activeCommunicationLog.customer_phone || lead.phone)}&text=${encodeURIComponent(activeCommunicationLog.message_body || "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800"
+                >
+                  Open WhatsApp Web fallback
+                </a>
+              </div>
+            )}
 
             {activeCommunicationLog?.channel === "Email" && (
               <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
@@ -5673,11 +5719,12 @@ async function fetchAffordabilityAssessments() {
                   value={communicationChannel}
                   onChange={(event) =>
                     setCommunicationChannel(
-                      event.target.value as "Message" | "Email"
+                      event.target.value as "WhatsApp" | "Email"
                     )
                   }
                   className="mt-1 w-full rounded-lg border border-slate-300 p-3"
                 >
+                  <option>WhatsApp</option>
                   <option>Email</option>
                 </select>
               </div>
