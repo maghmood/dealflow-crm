@@ -1474,101 +1474,121 @@ return (
   <DashboardLayout>
     <PageAccessGuard module="customers">
       <ReadOnlyNotice />
-      <div className="space-y-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <Link
-              href="/customers"
-              className="text-sm font-semibold text-blue-700 hover:underline"
-            >
-              ← Back to Customers
-            </Link>
+      <div className="space-y-6">
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0">
+              <Link
+                href="/customers"
+                className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              >
+                ← Back to Customers
+              </Link>
 
-            <div className="mt-3 flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-100 text-2xl font-extrabold text-blue-700">
-                {getInitials(customer.customer)}
-              </div>
-
-              <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-3xl font-bold text-slate-900">
-                    {customer.customer || "Unnamed Customer"}
-                  </h1>
-
-                  <span
-                    className={`${statusBadge(
-                      customer.status
-                    )} rounded-full px-3 py-1 text-xs font-bold`}
-                  >
-                    {customer.status || "New Lead"}
-                  </span>
+              <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.5rem] bg-gradient-to-br from-blue-600 to-emerald-500 text-2xl font-black text-white shadow-lg shadow-blue-900/15">
+                  {getInitials(customer.customer)}
                 </div>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Customer 360 profile generated from Lead #{customer.id}
-                </p>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="truncate text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+                      {customer.customer || "Unnamed Customer"}
+                    </h1>
+
+                    <span
+                      className={`${statusBadge(
+                        customer.status
+                      )} rounded-full px-3 py-1 text-xs font-black`}
+                    >
+                      {customer.status || "New Lead"}
+                    </span>
+                  </div>
+
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                    Customer 360 profile generated from Lead #{customer.id}. Use this page to review contact details, communication, finance, deal progress, documents and delivery readiness.
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
+                    <span className="rounded-full bg-slate-100 px-3 py-1">
+                      {customer.phone || "No phone"}
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-3 py-1">
+                      {customer.email || "No email"}
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-3 py-1">
+                      Assigned: {customer.assigned_user_name || "Unassigned"}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap gap-3">
-            
-            <WriteAccessGuard>
-  <button
-    type="button"
-    onClick={openEditCustomerModal}
-    className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100"
-  >
-    Edit Customer
-  </button>
-</WriteAccessGuard>
-            
+            <div className="grid gap-2 sm:grid-cols-2 xl:w-[420px]">
+              <WriteAccessGuard>
+                <button
+                  type="button"
+                  onClick={openEditCustomerModal}
+                  className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 transition hover:-translate-y-0.5 hover:bg-blue-100"
+                >
+                  Edit Customer
+                </button>
+              </WriteAccessGuard>
 
-            <WriteAccessGuard>
-              <button
-                type="button"
-                onClick={() => void submitCustomerToFinance()}
-                disabled={submittingToFinance || Boolean(financeApplication)}
-                className="rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submittingToFinance
-                  ? "Submitting..."
-                  : financeApplication
-                  ? "Finance Submitted"
-                  : "Submit to Finance"}
-              </button>
-            </WriteAccessGuard>
+              <WriteAccessGuard>
+                <button
+                  type="button"
+                  onClick={() => void submitCustomerToFinance()}
+                  disabled={submittingToFinance || Boolean(financeApplication)}
+                  className="rounded-2xl bg-orange-600 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-orange-500 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submittingToFinance
+                    ? "Submitting..."
+                    : financeApplication
+                    ? "Finance Submitted"
+                    : "Submit to Finance"}
+                </button>
+              </WriteAccessGuard>
 
-            <Link
-              href={`/leads/${customer.id}`}
-              className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
-            >
-              Open Lead
-            </Link>
-
-            {deals[0] && (
               <Link
-                href={`/deals/${deals[0].id}`}
-                className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500"
+                href={`/leads/${customer.id}`}
+                className="rounded-2xl bg-blue-600 px-4 py-3 text-center text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-blue-500"
               >
-                Open Latest Deal
+                Open Lead
               </Link>
-            )}
 
-            {linkedVehicle && (
-              <Link
-                href={`/inventory/${linkedVehicle.id}`}
-                className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700"
-              >
-                Open Vehicle
-              </Link>
-            )}
+              {deals[0] ? (
+                <Link
+                  href={`/deals/${deals[0].id}`}
+                  className="rounded-2xl bg-green-600 px-4 py-3 text-center text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-green-500"
+                >
+                  Open Latest Deal
+                </Link>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-400">
+                  No Deal Yet
+                </div>
+              )}
+
+              {linkedVehicle ? (
+                <Link
+                  href={`/inventory/${linkedVehicle.id}`}
+                  className="sm:col-span-2 rounded-2xl bg-slate-950 px-4 py-3 text-center text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-slate-800"
+                >
+                  Open Linked Vehicle
+                </Link>
+              ) : (
+                <div className="sm:col-span-2 rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-400">
+                  No linked vehicle yet
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <div
           className="grid gap-4"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}
         >
           <MetricCard label="Deals" value={deals.length} />
           <MetricCard label="Deal Value" value={formatRand(totalDealValue)} />
@@ -1584,14 +1604,14 @@ return (
 
 
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 className="text-lg font-black text-slate-950">
                 Communication Assist
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Start WhatsApp or email actions from Customer 360 and track pending outcomes.
+                Use WhatsApp Assist or Email Assist, then log the customer outcome so tasks and notifications stay accurate.
               </p>
             </div>
 
@@ -1691,8 +1711,8 @@ return (
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <h2 className="text-lg font-bold text-slate-900">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-black text-slate-950">
               Customer Details
             </h2>
 
@@ -1708,8 +1728,8 @@ return (
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <h2 className="text-lg font-bold text-slate-900">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-black text-slate-950">
               Linked Vehicle
             </h2>
 
@@ -1781,10 +1801,10 @@ return (
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
+                <h2 className="text-lg font-black text-slate-950">
                   Customer Deals
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
@@ -1812,7 +1832,7 @@ return (
                 deals.map((deal) => (
                   <div
                     key={deal.id}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                    className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4"
                   >
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
@@ -1867,8 +1887,8 @@ return (
           </div>
 
           <div className="space-y-5">
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-              <h2 className="text-lg font-bold text-slate-900">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-black text-slate-950">
                 Finance Snapshot
               </h2>
 
@@ -1908,10 +1928,10 @@ return (
               )}
             </div>
 
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">
+                  <h2 className="text-lg font-black text-slate-950">
                     Delivery Checklist
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
@@ -2045,8 +2065,8 @@ return (
               )}
             </div>
 
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-              <h2 className="text-lg font-bold text-slate-900">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-black text-slate-950">
                 Follow-Up Tasks
               </h2>
 
@@ -2061,7 +2081,7 @@ return (
                   tasks.slice(0, 5).map((task) => (
                     <div
                       key={task.id}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                      className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -2098,10 +2118,10 @@ return (
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
+                <h2 className="text-lg font-black text-slate-950">
                   Documents
                 </h2>
 
@@ -2130,7 +2150,7 @@ return (
                 documents.slice(0, 6).map((doc) => (
                   <div
                     key={doc.id}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                    className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -2171,10 +2191,10 @@ return (
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
+                <h2 className="text-lg font-black text-slate-950">
                   Activity History
                 </h2>
 
@@ -2640,9 +2660,11 @@ function MetricCard({
   value: string | number;
 }) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-      <p className="text-sm text-slate-500">{label}</p>
-      <h2 className="mt-1 truncate text-2xl font-bold text-slate-900">
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+        {label}
+      </p>
+      <h2 className="mt-3 truncate text-2xl font-black tracking-tight text-slate-950">
         {value}
       </h2>
     </div>
@@ -2657,11 +2679,11 @@ function Info({
   value: string | number | null | undefined;
 }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
         {label}
       </p>
-      <p className="mt-1 break-words text-sm font-bold text-slate-800">
+      <p className="mt-2 break-words text-sm font-bold text-slate-900">
         {value || "-"}
       </p>
     </div>
