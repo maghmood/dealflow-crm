@@ -842,65 +842,117 @@ export default function Home() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-8">
+
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="relative p-6 md:p-8">
+            <div className="absolute inset-x-0 top-0 h-1 brand-primary-bg" />
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                  Dealership Command Centre
+                </p>
+                <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-950 md:text-4xl">
+                  {isFinanceDashboard
+                    ? "Finance workspace"
+                    : "Sales, tasks and communication overview"}
+                </h1>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500 md:text-base">
+                  Monitor the work that needs attention, track customer communication outcomes,
+                  and keep every lead moving through the dealership workflow.
+                </p>
+              </div>
+
+              <div className="grid min-w-full gap-3 sm:grid-cols-3 lg:min-w-[460px]">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Open work
+                  </p>
+                  <p className="mt-1 text-2xl font-extrabold text-slate-950">
+                    {openTasks.length}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-orange-600">
+                    Pending outcomes
+                  </p>
+                  <p className="mt-1 text-2xl font-extrabold text-orange-800">
+                    {isFinanceDashboard ? "-" : pendingCommunicationLogs.length}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-red-600">
+                    Overdue
+                  </p>
+                  <p className="mt-1 text-2xl font-extrabold text-red-800">
+                    {overdueTasks.length}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* KPI CARDS */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-xl bg-white p-5 shadow">
-            <p className="text-sm text-slate-500">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+            <p className="text-sm leading-6 text-slate-500">
               {isFinanceDashboard ? "Finance Tasks" : "Total Leads"}
             </p>
-            <h2 className="mt-2 text-3xl font-bold text-slate-900">
+            <h2 className="mt-2 text-3xl font-extrabold text-slate-900">
               {isFinanceDashboard ? openTasks.length : totalLeads}
             </h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm leading-6 text-slate-500">
               {isFinanceDashboard
                 ? "Open Finance work assigned to you"
                 : "Company leads in the current view"}
             </p>
           </div>
 
-          <div className="rounded-xl bg-white p-5 shadow">
-            <p className="text-sm text-slate-500">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+            <p className="text-sm leading-6 text-slate-500">
               Conversion Rate
             </p>
-            <h2 className="mt-2 text-3xl font-bold text-slate-900">
+            <h2 className="mt-2 text-3xl font-extrabold text-slate-900">
               {isFinanceDashboard ? "-" : `${conversionRate}%`}
             </h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm leading-6 text-slate-500">
               Sold/Delivered customers vs active leads
             </p>
           </div>
 
-          <div className="rounded-xl bg-white p-5 shadow">
-            <p className="text-sm text-slate-500">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+            <p className="text-sm leading-6 text-slate-500">
               Finance Progress
             </p>
-            <h2 className="mt-2 text-3xl font-bold text-green-700">
+            <h2 className="mt-2 text-3xl font-extrabold text-green-700">
               {approvedFinance}
             </h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm leading-6 text-slate-500">
               {pendingFinance} pending • {declinedFinance} declined
             </p>
           </div>
 
-          <div className="rounded-xl bg-white p-5 shadow">
-            <p className="text-sm text-slate-500">Open Tasks</p>
-            <h2 className="mt-2 text-3xl font-bold text-orange-700">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+            <p className="text-sm leading-6 text-slate-500">Open Tasks</p>
+            <h2 className="mt-2 text-3xl font-extrabold text-orange-700">
               {openTasks.length}
             </h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm leading-6 text-slate-500">
               {overdueTasks.length} overdue • {dueTodayTasks.length} due today
             </p>
           </div>
 
-          <div className="rounded-xl bg-white p-5 shadow">
-            <p className="text-sm text-slate-500">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+            <p className="text-sm leading-6 text-slate-500">
               Delivered Deals
             </p>
-            <h2 className="mt-2 text-3xl font-bold text-emerald-700">
+            <h2 className="mt-2 text-3xl font-extrabold text-emerald-700">
               {isFinanceDashboard ? "-" : deliveredDeals}
             </h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm leading-6 text-slate-500">
               {isFinanceDashboard
                 ? "Sales delivery metrics hidden"
                 : `${salePendingDeals} sale pending • ${activeDeals} active`}
@@ -909,27 +961,27 @@ export default function Home() {
         </div>
 
         {/* TODAY'S AGENDA */}
-        <div className="rounded-xl bg-white p-6 shadow">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-slate-800">
+              <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">
                 Today’s Agenda
               </h2>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm leading-6 text-slate-500">
                 Open tasks due today plus overdue work that still needs action
               </p>
             </div>
 
             <Link
               href="/calendar"
-              className="rounded-lg brand-primary-bg px-4 py-2 text-sm font-semibold text-white"
+              className="rounded-xl brand-primary-bg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
             >
               Open Calendar
             </Link>
           </div>
 
           {agendaTasks.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
               No open agenda items for today.
             </div>
           ) : (
@@ -941,7 +993,7 @@ export default function Home() {
                 return (
                   <div
                     key={task.id}
-                    className={`rounded-xl border-l-4 p-4 shadow-sm ${agendaCardStyle(
+                    className={`rounded-2xl border-l-4 p-4 shadow-sm ${agendaCardStyle(
                       task
                     )}`}
                   >
@@ -993,7 +1045,7 @@ export default function Home() {
 
                       <Link
                         href={`/tasks?taskId=${task.id}`}
-                        className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
+                        className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
                       >
                         Open Task
                       </Link>
@@ -1007,13 +1059,13 @@ export default function Home() {
 
         {/* TASK WIDGETS */}
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="rounded-xl bg-white p-6 shadow lg:col-span-2">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-slate-800">
+                <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">
                   My Open Tasks
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm leading-6 text-slate-500">
                   Upcoming follow-ups, callbacks and operational actions
                 </p>
               </div>
@@ -1028,7 +1080,7 @@ export default function Home() {
 
             <div className="space-y-4">
               {upcomingTasks.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
                   No open tasks assigned.
                 </div>
               ) : (
@@ -1038,7 +1090,7 @@ export default function Home() {
                   return (
                     <div
                       key={task.id}
-                      className={`rounded-xl border p-4 ${
+                      className={`rounded-2xl border p-4 ${
                         isOverdue
                           ? "border-red-200 bg-red-50"
                           : "border-slate-200 bg-slate-50"
@@ -1055,7 +1107,7 @@ export default function Home() {
                           </p>
 
                           {task.description && (
-                            <p className="mt-1 text-sm text-slate-500">
+                            <p className="mt-1 text-sm leading-6 text-slate-500">
                               {task.description}
                             </p>
                           )}
@@ -1087,7 +1139,7 @@ export default function Home() {
 
                         <Link
                           href={`/tasks?taskId=${task.id}`}
-                          className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
+                          className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
                         >
                           Open Task
                         </Link>
@@ -1099,33 +1151,33 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="rounded-xl bg-white p-6 shadow">
-            <h2 className="text-2xl font-bold text-slate-800">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">
               Task Summary
             </h2>
 
-            <p className="text-sm text-slate-500">
+            <p className="text-sm leading-6 text-slate-500">
               Open work only, excluding completed tasks
             </p>
 
             <div className="mt-6 space-y-4">
-              <div className="rounded-xl bg-orange-50 p-4">
+              <div className="rounded-2xl border border-orange-100 bg-orange-50 p-4">
                 <p className="text-sm text-orange-700">Open Tasks</p>
-                <p className="mt-1 text-3xl font-bold text-orange-800">
+                <p className="mt-1 text-3xl font-extrabold text-orange-800">
                   {openTasks.length}
                 </p>
               </div>
 
-              <div className="rounded-xl bg-red-50 p-4">
+              <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
                 <p className="text-sm text-red-700">Overdue</p>
-                <p className="mt-1 text-3xl font-bold text-red-800">
+                <p className="mt-1 text-3xl font-extrabold text-red-800">
                   {overdueTasks.length}
                 </p>
               </div>
 
-              <div className="rounded-xl bg-blue-50 p-4">
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
                 <p className="text-sm text-blue-700">Due Today</p>
-                <p className="mt-1 text-3xl font-bold text-blue-800">
+                <p className="mt-1 text-3xl font-extrabold text-blue-800">
                   {dueTodayTasks.length}
                 </p>
               </div>
@@ -1135,20 +1187,20 @@ export default function Home() {
 
 
         {!isFinanceDashboard && (
-          <div className="rounded-xl bg-white p-6 shadow">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-slate-800">
+                <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">
                   Communication Accountability
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm leading-6 text-slate-500">
                   Pending outcomes, overdue communication follow-ups and leads needing contact
                 </p>
               </div>
 
               <Link
                 href="/tasks"
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
               >
                 Open Tasks
               </Link>
@@ -1192,7 +1244,7 @@ export default function Home() {
                 <h3 className="text-lg font-bold text-slate-900">
                   By Salesperson
                 </h3>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm leading-6 text-slate-500">
                   Use this for daily accountability check-ins.
                 </p>
 
@@ -1250,13 +1302,13 @@ export default function Home() {
                 <h3 className="text-lg font-bold text-slate-900">
                   At Risk Communication
                 </h3>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm leading-6 text-slate-500">
                   Items that need manager or salesperson attention.
                 </p>
 
                 <div className="mt-4 space-y-3">
                   {atRiskCommunicationItems.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+                    <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm leading-6 text-slate-500">
                       No communication risk items right now.
                     </div>
                   ) : (
@@ -1301,19 +1353,19 @@ export default function Home() {
           <>
             <div className="grid gap-6 lg:grid-cols-3">
               {/* LEADS BY STATUS */}
-              <div className="rounded-xl bg-white p-6 shadow lg:col-span-2">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
                 <div className="mb-6">
-                  <h2 className="text-2xl font-bold text-slate-800">
+                  <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">
                     Leads by Status
                   </h2>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm leading-6 text-slate-500">
                     Current dealership pipeline overview
                   </p>
                 </div>
 
                 <div className="space-y-4">
                   {leadsByStatus.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
                       No leads found.
                     </div>
                   ) : (
@@ -1341,35 +1393,35 @@ export default function Home() {
               </div>
 
               {/* FINANCE SNAPSHOT */}
-              <div className="rounded-xl bg-white p-6 shadow">
-                <h2 className="text-2xl font-bold text-slate-800">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">
                   Finance Snapshot
                 </h2>
 
-                <p className="text-sm text-slate-500">
+                <p className="text-sm leading-6 text-slate-500">
                   Application status summary
                 </p>
 
                 <div className="mt-6 space-y-4">
-                  <div className="rounded-xl bg-green-50 p-4">
+                  <div className="rounded-2xl border border-green-100 bg-green-50 p-4">
                     <p className="text-sm text-green-700">
                       Approved / Offers
                     </p>
-                    <p className="mt-1 text-3xl font-bold text-green-800">
+                    <p className="mt-1 text-3xl font-extrabold text-green-800">
                       {approvedFinance}
                     </p>
                   </div>
 
-                  <div className="rounded-xl bg-orange-50 p-4">
+                  <div className="rounded-2xl border border-orange-100 bg-orange-50 p-4">
                     <p className="text-sm text-orange-700">Pending</p>
-                    <p className="mt-1 text-3xl font-bold text-orange-800">
+                    <p className="mt-1 text-3xl font-extrabold text-orange-800">
                       {pendingFinance}
                     </p>
                   </div>
 
-                  <div className="rounded-xl bg-red-50 p-4">
+                  <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
                     <p className="text-sm text-red-700">Declined</p>
-                    <p className="mt-1 text-3xl font-bold text-red-800">
+                    <p className="mt-1 text-3xl font-extrabold text-red-800">
                       {declinedFinance}
                     </p>
                   </div>
@@ -1379,19 +1431,19 @@ export default function Home() {
 
             <div className="grid gap-6 lg:grid-cols-3">
               {/* LEAD SOURCE */}
-              <div className="rounded-xl bg-white p-6 shadow lg:col-span-2">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
                 <div className="mb-6">
-                  <h2 className="text-2xl font-bold text-slate-800">
+                  <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">
                     Lead Sources
                   </h2>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm leading-6 text-slate-500">
                     Where dealership leads are coming from
                   </p>
                 </div>
 
                 <div className="space-y-4">
                   {leadsBySource.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
                       No lead source data captured yet.
                     </div>
                   ) : (
@@ -1419,18 +1471,18 @@ export default function Home() {
               </div>
 
               {/* INVENTORY SNAPSHOT */}
-              <div className="rounded-xl bg-white p-6 shadow">
-                <h2 className="text-2xl font-bold text-slate-800">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">
                   Inventory Snapshot
                 </h2>
 
-                <p className="text-sm text-slate-500">
+                <p className="text-sm leading-6 text-slate-500">
                   Vehicle status overview
                 </p>
 
                 <div className="mt-6 space-y-4">
                   {vehiclesByStatus.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-slate-500">
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
                       No inventory data found.
                     </div>
                   ) : (
@@ -1461,19 +1513,19 @@ export default function Home() {
             </div>
 
             {/* SALESPERSON PERFORMANCE */}
-            <div className="rounded-xl bg-white p-6 shadow">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold text-slate-800">
+                <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">
                   Salesperson Performance
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm leading-6 text-slate-500">
                   Lead volume and Sold/Delivered conversion by salesperson
                 </p>
               </div>
 
               <div className="space-y-5">
                 {salespeople.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
                     No salesperson performance data yet.
                   </div>
                 ) : (
@@ -1485,7 +1537,7 @@ export default function Home() {
                             {person.name}
                           </p>
 
-                          <p className="text-sm text-slate-500">
+                          <p className="text-sm leading-6 text-slate-500">
                             {person.closed} sold/delivered from {person.leads} leads
                           </p>
                         </div>
@@ -1564,7 +1616,7 @@ function CommunicationMetric({
   };
 
   return (
-    <div className={`rounded-xl p-4 ${styles[tone].box}`}>
+    <div className={`rounded-2xl border border-white/70 p-4 shadow-sm ${styles[tone].box}`}>
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
         {label}
       </p>
