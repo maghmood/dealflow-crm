@@ -180,33 +180,33 @@ export default function PipelinePage() {
         </div>
 
         {loading ? (
-          <div className="rounded-2xl bg-white p-10 shadow-sm">
+          <div className="rounded-3xl border border-slate-200 bg-white p-10 shadow-sm">
             <p className="text-slate-500">Loading pipeline...</p>
           </div>
         ) : (
-          <div className="overflow-x-auto pb-6">
-            <div className="flex min-h-[680px] gap-5">
+          <div className="pb-6">
+            <div className="grid min-h-[680px] grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-9">
               {PIPELINE_COLUMNS.map((column) => {
                 const columnLeads = groupedLeads[column.status] || [];
 
                 return (
                   <div
                     key={column.status}
-                    className={`flex w-[310px] flex-shrink-0 flex-col rounded-2xl border-t-4 ${column.color} bg-white shadow-sm`}
+                    className={`flex min-w-0 flex-col rounded-2xl border-t-4 ${column.color} bg-white shadow-sm`}
                   >
-                    <div className={`${column.bg} rounded-t-2xl p-4`}>
+                    <div className={`${column.bg} rounded-t-2xl p-3`}>
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="flex items-center gap-2">
                             <span
                               className={`h-3 w-3 rounded-full ${column.dot}`}
                             />
-                            <h2 className="font-bold text-slate-800">
+                            <h2 className="text-sm font-bold text-slate-800">
                               {column.status}
                             </h2>
                           </div>
 
-                          <p className="mt-1 text-sm text-slate-500">
+                          <p className="mt-1 line-clamp-2 text-xs text-slate-500">
                             {columnLeads.length} leads
                           </p>
                         </div>
@@ -217,7 +217,7 @@ export default function PipelinePage() {
                       </div>
                     </div>
 
-                    <div className="flex-1 space-y-4 bg-slate-50/70 p-4">
+                    <div className="flex-1 space-y-3 bg-slate-50/70 p-3">
                       {columnLeads.length === 0 ? (
                         <div className="flex min-h-[180px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white/70 p-4 text-center text-sm text-slate-400">
                           No leads in this stage
@@ -226,15 +226,15 @@ export default function PipelinePage() {
                         columnLeads.map((lead) => (
                           <div
                             key={lead.id}
-                            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+                            className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div>
-                                <h3 className="font-bold text-slate-800">
+                                <h3 className="line-clamp-2 text-sm font-bold text-slate-800">
                                   {lead.customer || "Unnamed Customer"}
                                 </h3>
 
-                                <p className="mt-1 text-sm text-slate-500">
+                                <p className="mt-1 line-clamp-2 text-xs text-slate-500">
                                   {lead.vehicle ||
                                     lead.vehicle_interest ||
                                     "No vehicle selected"}
@@ -246,21 +246,21 @@ export default function PipelinePage() {
                               </span>
                             </div>
 
-                            <div className="mt-4 space-y-3">
+                            <div className="mt-3 space-y-2">
                               <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                                   Assigned To
                                 </p>
-                                <p className="text-sm font-medium text-slate-700">
+                                <p className="truncate text-xs font-medium text-slate-700">
                                   {lead.assigned_user_name || "Unassigned"}
                                 </p>
                               </div>
 
                               <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                                   Created
                                 </p>
-                                <p className="text-sm text-slate-600">
+                                <p className="text-xs text-slate-600">
                                   {lead.created_at
                                     ? new Date(
                                         lead.created_at
@@ -270,10 +270,10 @@ export default function PipelinePage() {
                               </div>
                             </div>
 
-                            <div className="mt-5">
+                            <div className="mt-4">
                               <Link
                                 href={`/leads/${lead.id}`}
-                                className="block rounded-2xl bg-slate-900 px-4 py-2 text-center text-sm text-white transition hover:bg-slate-700"
+                                className="block rounded-xl bg-slate-900 px-3 py-2 text-center text-xs font-semibold text-white transition hover:bg-slate-700"
                               >
                                 Open Lead
                               </Link>
