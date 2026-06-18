@@ -151,6 +151,41 @@ function isTaskDueSoon(task: CalendarTask) {
   return due >= now && due <= now + oneHour;
 }
 
+
+function toDatabaseTimestamp(value: string) {
+  return new Date(value).toISOString();
+}
+
+function toDateTimeLocalInput(value: string | null | undefined) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
+function workflowReasonForTaskType(taskType: string) {
+  const normalized = taskType.trim().toLowerCase();
+
+  if (normalized === "call") return "CALLBACK";
+  if (normalized === "callback") return "CALLBACK";
+  if (normalized === "follow-up" || normalized === "followup") {
+    return "CUSTOMER_FOLLOW_UP";
+  }
+  if (normalized === "test drive") return "TEST_DRIVE";
+  if (normalized === "appointment") return "APPOINTMENT";
+  if (normalized === "delivery") return "DELIVERY";
+  if (normalized === "finance") return "FINANCE_FOLLOW_UP";
+  if (normalized === "meeting") return "MEETING";
+
+  return normalized
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase() || "GENERAL";
+}
+
 export default function CalendarPage() {
   const { profile } = useAuth();
 
@@ -359,27 +394,83 @@ export default function CalendarPage() {
       salesUsers.find((user) => user.id === profile.id);
 
     const selectedLead = leads.find((lead) => lead.id === Number(eventLeadId));
-
     const selectedLeadId = eventLeadId === "" ? null : Number(eventLeadId);
+    const dueDateForDatabase = toDatabaseTimestamp(eventDateTime);
+
+    if (selectedLeadId && selectedUser) {
+      const { data, error } = await supabase.rpc(
+        "upsert_workflow_task",
+        {
+          p_lead_id: selectedLeadId,
+          p_assigned_user_id: selectedUser.id,
+          p_title: eventTitle.trim(),
+          p_description:
+            eventDescription.trim() ||
+            (selectedLead
+              ? `${eventType} for ${selectedLead.customer || "customer"}${
+                  selectedLead.vehicle ? ` • ${selectedLead.vehicle}` : ""
+                }`
+              : null),
+          p_task_type: eventType,
+          p_priority: eventPriority,
+          p_due_date: dueDateForDatabase,
+          p_task_scope: "Sales",
+          p_task_reason: workflowReasonForTaskType(eventType),
+          p_related_record_type: "lead",
+          p_related_record_id: selectedLeadId,
+          p_use_dedupe: true,
+        }
+      );
+
+      if (error) {
+        alert("Error saving calendar event: " + error.message);
+        setSavingEvent(false);
+        return;
+      }
+
+      const result = Array.isArray(data) ? data[0] : data;
+      const action = result?.task_action || "saved";
+
+      await addLeadActivity(
+        selectedLeadId,
+        action === "created"
+          ? "Calendar Event Created"
+          : action === "reopened"
+          ? "Calendar Event Reopened"
+          : "Calendar Event Updated",
+        `${eventType}: ${eventTitle.trim()} scheduled for ${new Date(
+          dueDateForDatabase
+        ).toLocaleString("en-ZA")}`,
+        "calendar",
+        action === "created" ? "blue" : "orange"
+      );
+
+      resetEventForm();
+      setShowCreateModal(false);
+      await fetchTasks();
+      alert(
+        action === "created"
+          ? "Calendar event created successfully."
+          : action === "reopened"
+          ? "Existing matching event reopened and updated."
+          : "Existing matching event updated."
+      );
+
+      return;
+    }
 
     const { error } = await supabase.from("tasks").insert({
       company_id: profile.company_id,
-      lead_id: selectedLeadId,
+      lead_id: null,
       assigned_user_id: selectedUser?.id || profile.id,
       assigned_user_name:
         selectedUser?.full_name || selectedUser?.email || profile.full_name,
       title: eventTitle.trim(),
-      description:
-        eventDescription.trim() ||
-        (selectedLead
-          ? `${eventType} for ${selectedLead.customer || "customer"}${
-              selectedLead.vehicle ? ` • ${selectedLead.vehicle}` : ""
-            }`
-          : null),
+      description: eventDescription.trim() || null,
       task_type: eventType,
       status: "Open",
       priority: eventPriority,
-      due_date: eventDateTime,
+      due_date: dueDateForDatabase,
       created_by_id: profile.id,
       created_by_name: profile.full_name,
     });
@@ -389,16 +480,6 @@ export default function CalendarPage() {
       setSavingEvent(false);
       return;
     }
-
-    await addLeadActivity(
-      selectedLeadId,
-      "Calendar Event Created",
-      `${eventType}: ${eventTitle.trim()} scheduled for ${new Date(
-        eventDateTime
-      ).toLocaleString("en-ZA")}`,
-      "calendar",
-      "blue"
-    );
 
     resetEventForm();
     setShowCreateModal(false);
@@ -442,9 +523,11 @@ export default function CalendarPage() {
       ? new Date(task.due_date).toLocaleString("en-ZA")
       : "No previous date";
 
+    const databaseDateTime = toDatabaseTimestamp(newDateTime);
+
     const { error } = await supabase
       .from("tasks")
-      .update({ due_date: newDateTime })
+      .update({ due_date: databaseDateTime })
       .eq("id", task.id)
       .eq("company_id", profile.company_id);
 
@@ -457,7 +540,7 @@ export default function CalendarPage() {
       task.lead_id,
       "Calendar Event Rescheduled",
       `${task.task_type || "Task"} "${task.title || "Untitled event"}" moved from ${oldDate} to ${new Date(
-        newDateTime
+        databaseDateTime
       ).toLocaleString("en-ZA")}${source === "drag" ? " via drag-and-drop" : ""}.`,
       "calendar",
       "orange"
@@ -816,6 +899,7 @@ export default function CalendarPage() {
 
                                   <p className="mt-1 line-clamp-1 opacity-80">
                                     {task.task_type || "Task"} •{" "}
+                                    {task.customer_name || "General"} •{" "}
                                     {task.assigned_user_name || "Unassigned"}
                                   </p>
 
@@ -834,7 +918,7 @@ export default function CalendarPage() {
 
                                     {task.lead_id && (
                                       <span className="rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold">
-                                        Lead #{task.lead_id}
+                                        {task.customer_name || `Lead #${task.lead_id}`}
                                       </span>
                                     )}
                                   </div>
@@ -944,7 +1028,8 @@ export default function CalendarPage() {
                     Lead
                   </p>
                   <p className="mt-1 text-sm font-medium text-slate-700">
-                    {selectedTask.lead_id ? `Lead #${selectedTask.lead_id}` : "-"}
+                    {selectedTask.customer_name ||
+                      (selectedTask.lead_id ? `Lead #${selectedTask.lead_id}` : "-")}
                   </p>
                 </div>
 
@@ -971,7 +1056,7 @@ export default function CalendarPage() {
                 onClick={() => {
                   setRescheduleDateTime(
                     selectedTask.due_date
-                      ? selectedTask.due_date.slice(0, 16)
+                      ? toDateTimeLocalInput(selectedTask.due_date)
                       : ""
                   );
                   setShowRescheduleModal(true);

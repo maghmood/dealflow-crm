@@ -47,6 +47,45 @@ type AssignableUser = {
   role: string | null;
 };
 
+
+function pad(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function toDatabaseTimestamp(value: string) {
+  return new Date(value).toISOString();
+}
+
+function toDateTimeLocalInput(value: string | null | undefined) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
+function workflowReasonForTaskType(taskType: string) {
+  const normalized = taskType.trim().toLowerCase();
+
+  if (normalized === "call") return "CALLBACK";
+  if (normalized === "callback") return "CALLBACK";
+  if (normalized === "follow-up" || normalized === "followup") {
+    return "CUSTOMER_FOLLOW_UP";
+  }
+  if (normalized === "test drive") return "TEST_DRIVE";
+  if (normalized === "appointment") return "APPOINTMENT";
+  if (normalized === "delivery") return "DELIVERY";
+  if (normalized === "finance") return "FINANCE_FOLLOW_UP";
+  if (normalized === "meeting") return "MEETING";
+
+  return normalized
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase() || "GENERAL";
+}
+
 export default function TasksPage() {
   const { profile } = useAuth();
   const searchParams = useSearchParams();
@@ -286,9 +325,74 @@ export default function TasksPage() {
 
     setSavingTask(true);
 
+    const dueDateForDatabase = toDatabaseTimestamp(taskDueDate);
+
+    if (selectedLead) {
+      const taskScope =
+        assignee.role === "Finance" || taskType === "Finance"
+          ? "Finance"
+          : "Sales";
+
+      const { data, error } = await supabase.rpc(
+        "upsert_workflow_task",
+        {
+          p_lead_id: selectedLead.id,
+          p_assigned_user_id: assignee.id,
+          p_title: taskTitle.trim(),
+          p_description: taskDescription.trim() || null,
+          p_task_type: taskType,
+          p_priority: taskPriority,
+          p_due_date: dueDateForDatabase,
+          p_task_scope: taskScope,
+          p_task_reason: workflowReasonForTaskType(taskType),
+          p_related_record_type: "lead",
+          p_related_record_id: selectedLead.id,
+          p_use_dedupe: true,
+        }
+      );
+
+      setSavingTask(false);
+
+      if (error) {
+        alert("Error saving task: " + error.message);
+        return;
+      }
+
+      const result = Array.isArray(data) ? data[0] : data;
+      const action = result?.task_action || "saved";
+
+      await supabase.from("lead_activities").insert({
+        company_id: profile.company_id,
+        lead_id: selectedLead.id,
+        title:
+          action === "created"
+            ? "Task Created"
+            : action === "reopened"
+            ? "Task Reopened"
+            : "Task Updated",
+        description: `${taskTitle.trim()} assigned to ${
+          assignee.full_name || assignee.email || "user"
+        } • Due: ${new Date(dueDateForDatabase).toLocaleString("en-ZA")}`,
+        activity_type: "task",
+        color: action === "created" ? "blue" : "orange",
+      });
+
+      setShowCreateModal(false);
+      await fetchTasks();
+      alert(
+        action === "created"
+          ? "Task created successfully."
+          : action === "reopened"
+          ? "Existing matching task reopened and updated."
+          : "Existing matching task updated."
+      );
+
+      return;
+    }
+
     const { error } = await supabase.from("tasks").insert({
       company_id: profile.company_id,
-      lead_id: selectedLead?.id || null,
+      lead_id: null,
       assigned_user_id: assignee.id,
       assigned_user_name:
         assignee.full_name || assignee.email || "Unassigned",
@@ -297,7 +401,7 @@ export default function TasksPage() {
       task_type: taskType,
       status: "Open",
       priority: taskPriority,
-      due_date: taskDueDate,
+      due_date: dueDateForDatabase,
       created_by_id: profile.id,
       created_by_name:
         profile.full_name || profile.email || "Unknown User",
@@ -311,22 +415,9 @@ export default function TasksPage() {
       return;
     }
 
-    if (selectedLead) {
-      await supabase.from("lead_activities").insert({
-        company_id: profile.company_id,
-        lead_id: selectedLead.id,
-        title: "Task Created",
-        description: `${taskTitle.trim()} assigned to ${
-          assignee.full_name || assignee.email || "user"
-        }`,
-        activity_type: "task",
-        color: "blue",
-      });
-    }
-
     setShowCreateModal(false);
     await fetchTasks();
-    alert("Task created successfully.");
+    alert("General task created successfully.");
   }
 
   function openTaskDetails(task: Task) {
@@ -345,7 +436,7 @@ export default function TasksPage() {
     const { error } = await supabase
       .from("tasks")
       .update({
-        due_date: rescheduleDateTime,
+        due_date: toDatabaseTimestamp(rescheduleDateTime),
         updated_at: new Date().toISOString(),
       })
       .eq("id", selectedTask.id)
@@ -362,7 +453,7 @@ export default function TasksPage() {
         lead_id: selectedTask.lead_id,
         title: "Task Rescheduled",
         description: `${selectedTask.title} moved to ${new Date(
-          rescheduleDateTime
+          toDatabaseTimestamp(rescheduleDateTime)
         ).toLocaleString("en-ZA")}`,
         activity_type: "task",
         color: "orange",

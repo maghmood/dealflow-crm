@@ -770,65 +770,20 @@ async function openSecureDocument(
   try {
     const title = formatVehicleTitle(selectedVehicle);
 
-    if (
-      linkedVehicle?.id &&
-      linkedVehicle.id !== selectedVehicle.id
-    ) {
-      const { error: releaseError } = await supabase
-        .from("inventory_vehicles")
-        .update({
-          linked_lead_id: null,
-          linked_customer_name: null,
-          status:
-            linkedVehicle.status === "Reserved"
-              ? "Available"
-              : linkedVehicle.status || "Available",
-        })
-        .eq("id", linkedVehicle.id)
-        .eq("company_id", profile.company_id);
-
-      if (releaseError) {
-        alert(
-          "Could not release the previously linked vehicle: " +
-            releaseError.message
-        );
-        return;
+    const { data, error } = await supabase.rpc(
+      "link_inventory_vehicle_to_lead",
+      {
+        p_lead_id: lead.id,
+        p_vehicle_id: selectedVehicle.id,
       }
-    }
+    );
 
-    const { error: vehicleError } = await supabase
-      .from("inventory_vehicles")
-      .update({
-        linked_lead_id: lead.id,
-        linked_customer_name: lead.customer,
-        status:
-          selectedVehicle.status === "Available"
-            ? "Reserved"
-            : selectedVehicle.status || "Reserved",
-      })
-      .eq("id", selectedVehicle.id)
-      .eq("company_id", profile.company_id);
-
-    if (vehicleError) {
-      alert("Error linking vehicle: " + vehicleError.message);
+    if (error) {
+      alert("Error linking vehicle: " + error.message);
       return;
     }
 
-    const { error: leadError } = await supabase
-      .from("leads")
-      .update({
-        vehicle: title,
-      })
-      .eq("id", lead.id)
-      .eq("company_id", profile.company_id);
-
-    if (leadError) {
-      alert(
-        "Vehicle linked, but lead update failed: " +
-          leadError.message
-      );
-      return;
-    }
+    const result = Array.isArray(data) ? data[0] : data;
 
     await addActivity(
       "Vehicle Linked from Affordability Match",
@@ -856,7 +811,14 @@ async function openSecureDocument(
 
     setLead({
       ...lead,
-      vehicle: title,
+      vehicle: result?.vehicle_title || title,
+    });
+
+    setLinkedVehicle({
+      ...selectedVehicle,
+      status: result?.vehicle_status || "Reserved",
+      linked_lead_id: lead.id,
+      linked_customer_name: lead.customer,
     });
 
     setVehiclePrice(
@@ -869,8 +831,10 @@ async function openSecureDocument(
     setSelectedInventoryVehicleId("");
 
     await Promise.all([
+      fetchLead(),
       fetchLinkedInventoryVehicle(),
       fetchInventoryVehicles(),
+      fetchActivities(),
     ]);
 
     alert("Vehicle linked successfully.");
