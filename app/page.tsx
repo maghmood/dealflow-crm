@@ -14,6 +14,7 @@ type Task = {
   status: string | null;
   priority: string | null;
   task_type: string | null;
+  task_scope: string | null;
   lead_id: number | null;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
@@ -23,12 +24,28 @@ type Task = {
 type Lead = {
   id: number;
   status: string | null;
+  source: string | null;
+  assigned_user_id: number | null;
   assigned_user_name: string | null;
+};
+
+type Deal = {
+  id: number;
+  lead_id: number | null;
+  vehicle_id: number | null;
+  deal_stage: string | null;
+  assigned_user_id: number | null;
 };
 
 type FinanceApplication = {
   id: number;
+  lead_id: number | null;
   finance_status: string | null;
+};
+
+type InventoryVehicle = {
+  id: number;
+  status: string | null;
 };
 
 function isSameDay(dateOne: Date, dateTwo: Date) {
@@ -39,13 +56,61 @@ function isSameDay(dateOne: Date, dateTwo: Date) {
   );
 }
 
+function isCompletedStatus(status: string | null) {
+  return (status || "").toLowerCase() === "completed";
+}
+
+function isConvertedLeadStatus(status: string | null) {
+  return [
+    "sold",
+    "delivered",
+    "deal closed",
+    "closed",
+  ].includes((status || "").toLowerCase());
+}
+
+function isLostLeadStatus(status: string | null) {
+  return ["lost", "cancelled"].includes(
+    (status || "").toLowerCase()
+  );
+}
+
+function isDeliveredDealStage(stage: string | null) {
+  return (stage || "").toLowerCase() === "delivered";
+}
+
+function isActiveDealStage(stage: string | null) {
+  return !["lost", "delivered"].includes(
+    (stage || "").toLowerCase()
+  );
+}
+
+function isFinanceApprovedLike(status: string | null) {
+  return [
+    "approved",
+    "offers available",
+    "offer selected",
+    "paid out",
+  ].includes((status || "").toLowerCase());
+}
+
+function isFinancePendingLike(status: string | null) {
+  return [
+    "submitted",
+    "pending",
+    "documents requested",
+    "not submitted",
+    "awaiting documents",
+  ].includes((status || "").toLowerCase());
+}
+
 function isTaskOverdue(task: Task) {
-  if (!task.due_date || task.status === "Completed") return false;
+  if (!task.due_date || isCompletedStatus(task.status)) return false;
   return new Date(task.due_date) < new Date();
 }
 
 function isTaskDueSoon(task: Task) {
-  if (!task.due_date || task.status === "Completed") return false;
+  if (!task.due_date || isCompletedStatus(task.status)) return false;
 
   const now = new Date().getTime();
   const due = new Date(task.due_date).getTime();
@@ -67,6 +132,7 @@ function agendaCardStyle(task: Task) {
     Followup: "border-purple-400 bg-purple-50 text-purple-950",
     "Follow-up": "border-purple-400 bg-purple-50 text-purple-950",
     Call: "border-green-400 bg-green-50 text-green-950",
+    Callback: "border-green-400 bg-green-50 text-green-950",
     Finance: "border-indigo-400 bg-indigo-50 text-indigo-950",
     Delivery: "border-teal-400 bg-teal-50 text-teal-950",
     Meeting: "border-yellow-400 bg-yellow-50 text-yellow-950",
@@ -74,14 +140,30 @@ function agendaCardStyle(task: Task) {
     Appointment: "border-cyan-400 bg-cyan-50 text-cyan-950",
   };
 
-  return styles[task.task_type || ""] || "border-blue-400 bg-blue-50 text-blue-950";
+  return (
+    styles[task.task_type || ""] ||
+    "border-blue-400 bg-blue-50 text-blue-950"
+  );
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+
+  return new Date(value).toLocaleString("en-ZA", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function Home() {
   const { profile } = useAuth();
 
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
   const [financeApps, setFinanceApps] = useState<FinanceApplication[]>([]);
+  const [vehicles, setVehicles] = useState<InventoryVehicle[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
 
   async function fetchTasks() {
@@ -89,12 +171,20 @@ export default function Home() {
 
     let query = supabase
       .from("tasks")
-      .select("*")
+      .select(
+        "id, title, description, due_date, status, priority, task_type, task_scope, lead_id, assigned_user_id, assigned_user_name"
+      )
       .eq("company_id", profile.company_id)
       .order("due_date", { ascending: true });
 
     if (profile.role === "Sales") {
       query = query.eq("assigned_user_id", profile.id);
+    }
+
+    if (profile.role === "Finance") {
+      query = query
+        .eq("assigned_user_id", profile.id)
+        .eq("task_scope", "Finance");
     }
 
     const { data, error } = await query;
@@ -105,9 +195,7 @@ export default function Home() {
       return;
     }
 
-    const baseTasks = Array.isArray(data)
-      ? (data as Task[])
-      : [];
+    const baseTasks = Array.isArray(data) ? (data as Task[]) : [];
 
     const leadIds = Array.from(
       new Set(
@@ -120,12 +208,11 @@ export default function Home() {
     let customerMap = new Map<number, string>();
 
     if (leadIds.length > 0) {
-      const { data: leadData, error: leadError } =
-        await supabase
-          .from("leads")
-          .select("id, customer")
-          .eq("company_id", profile.company_id)
-          .in("id", leadIds);
+      const { data: leadData, error: leadError } = await supabase
+        .from("leads")
+        .select("id, customer")
+        .eq("company_id", profile.company_id)
+        .in("id", leadIds);
 
       if (leadError) {
         console.error(
@@ -155,47 +242,143 @@ export default function Home() {
   async function fetchDashboardData() {
     if (!profile?.company_id) return;
 
-    let leadQuery = supabase
-      .from("leads")
-      .select("id, status, assigned_user_name, assigned_user_id")
+    /*
+     * Finance users do not use the general sales dashboard.
+     * They still see their Finance tasks and company finance application summary.
+     */
+    const shouldLoadSalesData = profile.role !== "Finance";
+
+    let leadRows: Lead[] = [];
+
+    if (shouldLoadSalesData) {
+      let leadQuery = supabase
+        .from("leads")
+        .select(
+          "id, status, source, assigned_user_id, assigned_user_name"
+        )
+        .eq("company_id", profile.company_id);
+
+      if (profile.role === "Sales") {
+        leadQuery = leadQuery.eq("assigned_user_id", profile.id);
+      }
+
+      const { data: leadData, error: leadError } = await leadQuery;
+
+      if (leadError) {
+        console.error("Error loading leads:", leadError.message);
+        leadRows = [];
+      } else {
+        leadRows = Array.isArray(leadData) ? (leadData as Lead[]) : [];
+      }
+
+      setLeads(leadRows);
+    } else {
+      setLeads([]);
+    }
+
+    let financeQuery = supabase
+      .from("finance_applications")
+      .select("id, lead_id, finance_status")
       .eq("company_id", profile.company_id);
 
     if (profile.role === "Sales") {
-      leadQuery = leadQuery.eq("assigned_user_id", profile.id);
+      const leadIds = leadRows.map((lead) => lead.id);
+
+      if (leadIds.length === 0) {
+        setFinanceApps([]);
+      } else {
+        financeQuery = financeQuery.in("lead_id", leadIds);
+      }
     }
 
-    const { data: leadData, error: leadError } = await leadQuery;
+    if (!(profile.role === "Sales" && leadRows.length === 0)) {
+      const { data: financeData, error: financeError } =
+        await financeQuery;
 
-    if (leadError) {
-      console.error("Error loading leads:", leadError.message);
-      setLeads([]);
-    } else {
-      setLeads(Array.isArray(leadData) ? leadData : []);
+      if (financeError) {
+        console.error(
+          "Error loading finance applications:",
+          financeError.message
+        );
+        setFinanceApps([]);
+      } else {
+        setFinanceApps(
+          Array.isArray(financeData)
+            ? (financeData as FinanceApplication[])
+            : []
+        );
+      }
     }
 
-    const { data: financeData, error: financeError } = await supabase
-      .from("finance_applications")
-      .select("id, finance_status")
-      .eq("company_id", profile.company_id);
+    if (shouldLoadSalesData) {
+      let dealQuery = supabase
+        .from("deals")
+        .select("id, lead_id, vehicle_id, deal_stage, assigned_user_id")
+        .eq("company_id", profile.company_id);
 
-    if (financeError) {
-      console.error(
-        "Error loading finance applications:",
-        financeError.message
-      );
-      setFinanceApps([]);
+      if (profile.role === "Sales") {
+        dealQuery = dealQuery.eq("assigned_user_id", profile.id);
+      }
+
+      const { data: dealData, error: dealError } = await dealQuery;
+
+      if (dealError) {
+        console.error("Error loading deals:", dealError.message);
+        setDeals([]);
+      } else {
+        setDeals(Array.isArray(dealData) ? (dealData as Deal[]) : []);
+      }
+
+      const { data: vehicleData, error: vehicleError } = await supabase
+        .from("inventory_vehicles")
+        .select("id, status")
+        .eq("company_id", profile.company_id);
+
+      if (vehicleError) {
+        console.error(
+          "Error loading inventory summary:",
+          vehicleError.message
+        );
+        setVehicles([]);
+      } else {
+        setVehicles(
+          Array.isArray(vehicleData)
+            ? (vehicleData as InventoryVehicle[])
+            : []
+        );
+      }
     } else {
-      setFinanceApps(Array.isArray(financeData) ? financeData : []);
+      setDeals([]);
+      setVehicles([]);
     }
   }
 
   useEffect(() => {
-    fetchTasks();
-    fetchDashboardData();
+    if (!profile?.company_id) return;
+
+    void fetchTasks();
+    void fetchDashboardData();
+
+    function handleTaskUpdated() {
+      void fetchTasks();
+      void fetchDashboardData();
+    }
+
+    window.addEventListener(
+      "dealflow-task-updated",
+      handleTaskUpdated
+    );
+
+    return () => {
+      window.removeEventListener(
+        "dealflow-task-updated",
+        handleTaskUpdated
+      );
+    };
   }, [profile?.company_id, profile?.role, profile?.id]);
 
   const openTasks = useMemo(
-    () => tasks.filter((task) => task.status !== "Completed"),
+    () => tasks.filter((task) => !isCompletedStatus(task.status)),
     [tasks]
   );
 
@@ -207,7 +390,7 @@ export default function Home() {
   const dueTodayTasks = useMemo(
     () =>
       tasks.filter((task) => {
-        if (!task.due_date || task.status === "Completed") return false;
+        if (!task.due_date || isCompletedStatus(task.status)) return false;
         return isSameDay(new Date(task.due_date), new Date());
       }),
     [tasks]
@@ -217,8 +400,14 @@ export default function Home() {
     () =>
       tasks
         .filter((task) => {
-          if (!task.due_date || task.status === "Completed") return false;
-          return isSameDay(new Date(task.due_date), new Date());
+          if (!task.due_date || isCompletedStatus(task.status)) return false;
+
+          const dueDate = new Date(task.due_date);
+
+          return (
+            dueDate < new Date() ||
+            isSameDay(dueDate, new Date())
+          );
         })
         .sort((a, b) => {
           const aTime = a.due_date ? new Date(a.due_date).getTime() : 0;
@@ -230,32 +419,84 @@ export default function Home() {
   );
 
   const upcomingTasks = useMemo(
-    () => tasks.filter((task) => task.status !== "Completed").slice(0, 5),
-    [tasks]
+    () =>
+      openTasks
+        .slice()
+        .sort((a, b) => {
+          const aTime = a.due_date ? new Date(a.due_date).getTime() : 0;
+          const bTime = b.due_date ? new Date(b.due_date).getTime() : 0;
+          return aTime - bTime;
+        })
+        .slice(0, 5),
+    [openTasks]
   );
 
   const totalLeads = leads.length;
 
-  const closedLeads = leads.filter(
-    (lead) => lead.status === "Closed" || lead.status === "Delivered"
+  const deliveredDealLeadIds = new Set(
+    deals
+      .filter((deal) => isDeliveredDealStage(deal.deal_stage))
+      .map((deal) => deal.lead_id)
+      .filter((leadId): leadId is number => Boolean(leadId))
+  );
+
+  const convertedLeadIds = new Set<number>();
+
+  leads.forEach((lead) => {
+    if (isConvertedLeadStatus(lead.status)) {
+      convertedLeadIds.add(lead.id);
+    }
+  });
+
+  deliveredDealLeadIds.forEach((leadId) => {
+    convertedLeadIds.add(leadId);
+  });
+
+  const convertedLeads = convertedLeadIds.size;
+
+  const activeLeadBase = leads.filter(
+    (lead) => !isLostLeadStatus(lead.status)
   ).length;
 
   const conversionRate =
-    totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0;
+    activeLeadBase > 0
+      ? Math.round((convertedLeads / activeLeadBase) * 100)
+      : 0;
 
-  const approvedFinance = financeApps.filter(
-    (app) => app.finance_status === "Approved"
+  const deliveredDeals = deals.filter((deal) =>
+    isDeliveredDealStage(deal.deal_stage)
   ).length;
 
-  const pendingFinance = financeApps.filter(
-    (app) =>
-      app.finance_status === "Submitted" ||
-      app.finance_status === "Pending"
+  const salePendingDeals = deals.filter(
+    (deal) => deal.deal_stage === "Sale Pending"
+  ).length;
+
+  const activeDeals = deals.filter((deal) =>
+    isActiveDealStage(deal.deal_stage)
+  ).length;
+
+  const approvedFinance = financeApps.filter((app) =>
+    isFinanceApprovedLike(app.finance_status)
+  ).length;
+
+  const pendingFinance = financeApps.filter((app) =>
+    isFinancePendingLike(app.finance_status)
   ).length;
 
   const declinedFinance = financeApps.filter(
-    (app) => app.finance_status === "Declined"
+    (app) => (app.finance_status || "").toLowerCase() === "declined"
   ).length;
+
+  const vehiclesByStatus = Object.entries(
+    vehicles.reduce((acc: Record<string, number>, vehicle) => {
+      const status = vehicle.status || "Unknown";
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {})
+  ).map(([status, count]) => ({
+    status,
+    count,
+  }));
 
   const leadsByStatus = Object.entries(
     leads.reduce((acc: Record<string, number>, lead) => {
@@ -267,6 +508,19 @@ export default function Home() {
     status,
     count,
   }));
+
+  const leadsBySource = Object.entries(
+    leads.reduce((acc: Record<string, number>, lead) => {
+      const source = lead.source || "Not Captured";
+      acc[source] = (acc[source] || 0) + 1;
+      return acc;
+    }, {})
+  )
+    .map(([source, count]) => ({
+      source,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count);
 
   const salespeople = Object.entries(
     leads.reduce(
@@ -282,7 +536,10 @@ export default function Home() {
 
         acc[user].leads += 1;
 
-        if (lead.status === "Closed" || lead.status === "Delivered") {
+        if (
+          isConvertedLeadStatus(lead.status) ||
+          deliveredDealLeadIds.has(lead.id)
+        ) {
           acc[user].closed += 1;
         }
 
@@ -301,53 +558,87 @@ export default function Home() {
       ? Math.max(...leadsByStatus.map((item) => item.count))
       : 1;
 
+  const maxSourceCount =
+    leadsBySource.length > 0
+      ? Math.max(...leadsBySource.map((item) => item.count))
+      : 1;
+
+  const maxVehicleStatusCount =
+    vehiclesByStatus.length > 0
+      ? Math.max(...vehiclesByStatus.map((item) => item.count))
+      : 1;
+
   const maxSalesLeads =
     salespeople.length > 0
       ? Math.max(...salespeople.map((item) => item.leads))
       : 1;
 
+  const isFinanceDashboard = profile?.role === "Finance";
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* KPI CARDS */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-xl bg-white p-5 shadow">
-            <p className="text-sm text-slate-500">Total Leads</p>
+            <p className="text-sm text-slate-500">
+              {isFinanceDashboard ? "Finance Tasks" : "Total Leads"}
+            </p>
             <h2 className="mt-2 text-3xl font-bold text-slate-900">
-              {totalLeads}
+              {isFinanceDashboard ? openTasks.length : totalLeads}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              Active dealership leads
+              {isFinanceDashboard
+                ? "Open Finance work assigned to you"
+                : "Company leads in the current view"}
             </p>
           </div>
 
           <div className="rounded-xl bg-white p-5 shadow">
-            <p className="text-sm text-slate-500">Conversion Rate</p>
+            <p className="text-sm text-slate-500">
+              Conversion Rate
+            </p>
             <h2 className="mt-2 text-3xl font-bold text-slate-900">
-              {conversionRate}%
+              {isFinanceDashboard ? "-" : `${conversionRate}%`}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              Closed vs total leads
+              Sold/Delivered customers vs active leads
             </p>
           </div>
 
           <div className="rounded-xl bg-white p-5 shadow">
-            <p className="text-sm text-slate-500">Finance Approvals</p>
+            <p className="text-sm text-slate-500">
+              Finance Progress
+            </p>
             <h2 className="mt-2 text-3xl font-bold text-green-700">
               {approvedFinance}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              {pendingFinance} pending
+              {pendingFinance} pending • {declinedFinance} declined
             </p>
           </div>
 
           <div className="rounded-xl bg-white p-5 shadow">
-            <p className="text-sm text-slate-500">Overdue Tasks</p>
-            <h2 className="mt-2 text-3xl font-bold text-red-600">
-              {overdueTasks.length}
+            <p className="text-sm text-slate-500">Open Tasks</p>
+            <h2 className="mt-2 text-3xl font-bold text-orange-700">
+              {openTasks.length}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              Needs immediate attention
+              {overdueTasks.length} overdue • {dueTodayTasks.length} due today
+            </p>
+          </div>
+
+          <div className="rounded-xl bg-white p-5 shadow">
+            <p className="text-sm text-slate-500">
+              Delivered Deals
+            </p>
+            <h2 className="mt-2 text-3xl font-bold text-emerald-700">
+              {isFinanceDashboard ? "-" : deliveredDeals}
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              {isFinanceDashboard
+                ? "Sales delivery metrics hidden"
+                : `${salePendingDeals} sale pending • ${activeDeals} active`}
             </p>
           </div>
         </div>
@@ -360,7 +651,7 @@ export default function Home() {
                 Today’s Agenda
               </h2>
               <p className="text-sm text-slate-500">
-                Scheduled appointments, test drives, calls and follow-ups due today
+                Open tasks due today plus overdue work that still needs action
               </p>
             </div>
 
@@ -396,8 +687,7 @@ export default function Home() {
                         </p>
 
                         <p className="mt-1 text-sm font-bold text-blue-800">
-                          {task.customer_name ||
-                            "General / Unlinked"}
+                          {task.customer_name || "General / Unlinked"}
                         </p>
 
                         <p className="mt-1 text-sm opacity-80">
@@ -407,15 +697,7 @@ export default function Home() {
                       </div>
 
                       <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold">
-                        {task.due_date
-                          ? new Date(task.due_date).toLocaleTimeString(
-                              "en-ZA",
-                              {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
-                            )
-                          : "-"}
+                        {formatDateTime(task.due_date)}
                       </span>
                     </div>
 
@@ -444,21 +726,12 @@ export default function Home() {
                         </span>
                       </div>
 
-                      {task.lead_id ? (
-                        <Link
-                          href={`/tasks?taskId=${task.id}`}
-                          className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
-                        >
-                          Open Lead
-                        </Link>
-                      ) : (
-                        <Link
-                          href={`/tasks?taskId=${task.id}`}
-                          className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
-                        >
-                          Open Task
-                        </Link>
-                      )}
+                      <Link
+                        href={`/tasks?taskId=${task.id}`}
+                        className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
+                      >
+                        Open Task
+                      </Link>
                     </div>
                   </div>
                 );
@@ -476,7 +749,7 @@ export default function Home() {
                   My Open Tasks
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Upcoming follow-ups and callbacks
+                  Upcoming follow-ups, callbacks and operational actions
                 </p>
               </div>
 
@@ -495,8 +768,7 @@ export default function Home() {
                 </div>
               ) : (
                 upcomingTasks.map((task) => {
-                  const isOverdue =
-                    task.due_date && new Date(task.due_date) < new Date();
+                  const isOverdue = isTaskOverdue(task);
 
                   return (
                     <div
@@ -513,6 +785,10 @@ export default function Home() {
                             {task.title}
                           </h3>
 
+                          <p className="mt-1 text-sm font-medium text-blue-700">
+                            {task.customer_name || "General / Unlinked"}
+                          </p>
+
                           {task.description && (
                             <p className="mt-1 text-sm text-slate-500">
                               {task.description}
@@ -524,6 +800,12 @@ export default function Home() {
                               {task.priority || "Medium"}
                             </span>
 
+                            {task.task_type && (
+                              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+                                {task.task_type}
+                              </span>
+                            )}
+
                             {task.due_date && (
                               <span
                                 className={
@@ -532,23 +814,18 @@ export default function Home() {
                                     : "text-slate-500"
                                 }
                               >
-                                Due:{" "}
-                                {new Date(task.due_date).toLocaleString(
-                                  "en-ZA"
-                                )}
+                                Due: {formatDateTime(task.due_date)}
                               </span>
                             )}
                           </div>
                         </div>
 
-                        {task.lead_id && (
-                          <Link
-                            href={`/tasks?taskId=${task.id}`}
-                            className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
-                          >
-                            Open Lead
-                          </Link>
-                        )}
+                        <Link
+                          href={`/tasks?taskId=${task.id}`}
+                          className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
+                        >
+                          Open Task
+                        </Link>
                       </div>
                     </div>
                   );
@@ -563,7 +840,7 @@ export default function Home() {
             </h2>
 
             <p className="text-sm text-slate-500">
-              Operational follow-up overview
+              Open work only, excluding completed tasks
             </p>
 
             <div className="mt-6 space-y-4">
@@ -591,133 +868,224 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* LEADS BY STATUS */}
-          <div className="rounded-xl bg-white p-6 shadow lg:col-span-2">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">
-                Leads by Status
-              </h2>
-              <p className="text-sm text-slate-500">
-                Current dealership pipeline overview
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              {leadsByStatus.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
-                  No leads found.
+        {!isFinanceDashboard && (
+          <>
+            <div className="grid gap-6 lg:grid-cols-3">
+              {/* LEADS BY STATUS */}
+              <div className="rounded-xl bg-white p-6 shadow lg:col-span-2">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-slate-800">
+                    Leads by Status
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    Current dealership pipeline overview
+                  </p>
                 </div>
-              ) : (
-                leadsByStatus.map((item) => (
-                  <div key={item.status}>
-                    <div className="mb-1 flex justify-between text-sm">
-                      <span className="font-medium text-slate-700">
-                        {item.status}
-                      </span>
-                      <span className="text-slate-500">{item.count}</span>
+
+                <div className="space-y-4">
+                  {leadsByStatus.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                      No leads found.
                     </div>
+                  ) : (
+                    leadsByStatus.map((item) => (
+                      <div key={item.status}>
+                        <div className="mb-1 flex justify-between text-sm">
+                          <span className="font-medium text-slate-700">
+                            {item.status}
+                          </span>
+                          <span className="text-slate-500">{item.count}</span>
+                        </div>
 
-                    <div className="h-4 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full brand-primary-bg"
-                        style={{
-                          width: `${(item.count / maxStatusCount) * 100}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+                        <div className="h-4 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full brand-primary-bg"
+                            style={{
+                              width: `${(item.count / maxStatusCount) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
 
-          {/* FINANCE SNAPSHOT */}
-          <div className="rounded-xl bg-white p-6 shadow">
-            <h2 className="text-2xl font-bold text-slate-800">
-              Finance Snapshot
-            </h2>
+              {/* FINANCE SNAPSHOT */}
+              <div className="rounded-xl bg-white p-6 shadow">
+                <h2 className="text-2xl font-bold text-slate-800">
+                  Finance Snapshot
+                </h2>
 
-            <p className="text-sm text-slate-500">
-              Application status summary
-            </p>
-
-            <div className="mt-6 space-y-4">
-              <div className="rounded-xl bg-green-50 p-4">
-                <p className="text-sm text-green-700">Approved</p>
-                <p className="mt-1 text-3xl font-bold text-green-800">
-                  {approvedFinance}
+                <p className="text-sm text-slate-500">
+                  Application status summary
                 </p>
-              </div>
 
-              <div className="rounded-xl bg-orange-50 p-4">
-                <p className="text-sm text-orange-700">Pending</p>
-                <p className="mt-1 text-3xl font-bold text-orange-800">
-                  {pendingFinance}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-red-50 p-4">
-                <p className="text-sm text-red-700">Declined</p>
-                <p className="mt-1 text-3xl font-bold text-red-800">
-                  {declinedFinance}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SALESPERSON PERFORMANCE */}
-        <div className="rounded-xl bg-white p-6 shadow">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-slate-800">
-              Salesperson Performance
-            </h2>
-            <p className="text-sm text-slate-500">
-              Lead volume and closed deals by agent
-            </p>
-          </div>
-
-          <div className="space-y-5">
-            {salespeople.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
-                No salesperson performance data yet.
-              </div>
-            ) : (
-              salespeople.map((person) => (
-                <div key={person.name}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-slate-800">
-                        {person.name}
-                      </p>
-
-                      <p className="text-sm text-slate-500">
-                        {person.closed} closed from {person.leads} leads
-                      </p>
-                    </div>
-
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
-                      {person.leads > 0
-                        ? Math.round((person.closed / person.leads) * 100)
-                        : 0}
-                      % conversion
-                    </span>
+                <div className="mt-6 space-y-4">
+                  <div className="rounded-xl bg-green-50 p-4">
+                    <p className="text-sm text-green-700">
+                      Approved / Offers
+                    </p>
+                    <p className="mt-1 text-3xl font-bold text-green-800">
+                      {approvedFinance}
+                    </p>
                   </div>
 
-                  <div className="h-4 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full brand-accent-bg"
-                      style={{
-                        width: `${(person.leads / maxSalesLeads) * 100}%`,
-                      }}
-                    />
+                  <div className="rounded-xl bg-orange-50 p-4">
+                    <p className="text-sm text-orange-700">Pending</p>
+                    <p className="mt-1 text-3xl font-bold text-orange-800">
+                      {pendingFinance}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-red-50 p-4">
+                    <p className="text-sm text-red-700">Declined</p>
+                    <p className="mt-1 text-3xl font-bold text-red-800">
+                      {declinedFinance}
+                    </p>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
+              </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              {/* LEAD SOURCE */}
+              <div className="rounded-xl bg-white p-6 shadow lg:col-span-2">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-slate-800">
+                    Lead Sources
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    Where dealership leads are coming from
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  {leadsBySource.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                      No lead source data captured yet.
+                    </div>
+                  ) : (
+                    leadsBySource.map((item) => (
+                      <div key={item.source}>
+                        <div className="mb-1 flex justify-between text-sm">
+                          <span className="font-medium text-slate-700">
+                            {item.source}
+                          </span>
+                          <span className="text-slate-500">{item.count}</span>
+                        </div>
+
+                        <div className="h-4 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full brand-accent-bg"
+                            style={{
+                              width: `${(item.count / maxSourceCount) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* INVENTORY SNAPSHOT */}
+              <div className="rounded-xl bg-white p-6 shadow">
+                <h2 className="text-2xl font-bold text-slate-800">
+                  Inventory Snapshot
+                </h2>
+
+                <p className="text-sm text-slate-500">
+                  Vehicle status overview
+                </p>
+
+                <div className="mt-6 space-y-4">
+                  {vehiclesByStatus.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-slate-500">
+                      No inventory data found.
+                    </div>
+                  ) : (
+                    vehiclesByStatus.map((item) => (
+                      <div key={item.status}>
+                        <div className="mb-1 flex justify-between text-sm">
+                          <span className="font-medium text-slate-700">
+                            {item.status}
+                          </span>
+                          <span className="text-slate-500">{item.count}</span>
+                        </div>
+
+                        <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full brand-primary-bg"
+                            style={{
+                              width: `${
+                                (item.count / maxVehicleStatusCount) * 100
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SALESPERSON PERFORMANCE */}
+            <div className="rounded-xl bg-white p-6 shadow">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-slate-800">
+                  Salesperson Performance
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Lead volume and Sold/Delivered conversion by salesperson
+                </p>
+              </div>
+
+              <div className="space-y-5">
+                {salespeople.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                    No salesperson performance data yet.
+                  </div>
+                ) : (
+                  salespeople.map((person) => (
+                    <div key={person.name}>
+                      <div className="mb-2 flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-slate-800">
+                            {person.name}
+                          </p>
+
+                          <p className="text-sm text-slate-500">
+                            {person.closed} sold/delivered from {person.leads} leads
+                          </p>
+                        </div>
+
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+                          {person.leads > 0
+                            ? Math.round(
+                                (person.closed / person.leads) * 100
+                              )
+                            : 0}
+                          % conversion
+                        </span>
+                      </div>
+
+                      <div className="h-4 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="h-full rounded-full brand-accent-bg"
+                          style={{
+                            width: `${(person.leads / maxSalesLeads) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );
