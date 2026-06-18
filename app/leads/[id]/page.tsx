@@ -3380,7 +3380,7 @@ async function fetchAffordabilityAssessments() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="rounded-xl bg-white p-6 shadow">Loading lead...</div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">Loading lead...</div>
       </DashboardLayout>
     );
   }
@@ -3388,7 +3388,7 @@ async function fetchAffordabilityAssessments() {
   if (!lead) {
     return (
       <DashboardLayout>
-        <div className="rounded-xl bg-white p-10 shadow">
+        <div className="rounded-3xl border border-slate-200 bg-white p-10 shadow-sm">
           <h1 className="text-2xl font-bold text-slate-800">Lead Not Found</h1>
           <p className="mt-3 text-slate-500">
             You do not have permission to view this lead, or it no longer
@@ -3401,155 +3401,238 @@ async function fetchAffordabilityAssessments() {
 
   const linkedVehicleTitle = formatVehicleTitle(linkedVehicle);
 
+  const pendingCommunicationOutcomeCount = communicationLogs.filter(
+    (log) => (log.send_status || "Pending Outcome") === "Pending Outcome"
+  ).length;
+
+  const openLeadTaskCount = leadTasks.filter(
+    (task) => task.status !== "Completed"
+  ).length;
+
+  const leadReadinessItems = [
+    {
+      label: "Contact",
+      value: lead.last_contacted_at ? "Logged" : "Not logged",
+      good: Boolean(lead.last_contacted_at),
+    },
+    {
+      label: "Vehicle",
+      value: linkedVehicle ? "Linked" : "Not linked",
+      good: Boolean(linkedVehicle),
+    },
+    {
+      label: "Finance",
+      value: lead.finance || "Not Submitted",
+      good: Boolean(financeApplicationId),
+    },
+    {
+      label: "Deal",
+      value: linkedDealSnapshot ? `#${linkedDealSnapshot.id}` : "Not created",
+      good: Boolean(linkedDealSnapshot),
+    },
+    {
+      label: "Open Tasks",
+      value: String(openLeadTaskCount),
+      good: openLeadTaskCount === 0,
+    },
+  ];
+
  return (
   <DashboardLayout>
     <PageAccessGuard module="leadDetail">
       <ReadOnlyNotice />
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <div className="rounded-xl bg-white p-6 shadow">
-            <div className="flex items-start justify-between">
-              <div>
-                <Link
-                  href={`/customers/${lead.id}`}
-                  className="group inline-flex items-center gap-2"
-                  title="Open Customer 360"
-                >
-                  <h1 className="text-3xl font-bold text-slate-800 group-hover:text-blue-700">
-                    {lead.customer}
-                  </h1>
 
-                  <span
-                    aria-hidden="true"
-                    className="text-lg font-bold text-slate-400 transition group-hover:text-blue-600"
+      <div className="space-y-6">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6 text-white">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/customers/${lead.id}`}
+                    className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white/80 hover:bg-white/15"
+                    title="Open Customer 360"
                   >
-                    ↗
+                    Customer 360 ↗
+                  </Link>
+
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white/70">
+                    Lead #{lead.id}
                   </span>
-                </Link>
-                <p className="mt-1 text-slate-500">
-                  Interested in {lead.vehicle || "No vehicle selected"}
+                </div>
+
+                <h1 className="mt-4 text-3xl font-black tracking-tight text-white md:text-5xl">
+                  {lead.customer}
+                </h1>
+
+                <p className="mt-3 max-w-3xl text-base leading-7 text-slate-300">
+                  Interested in {lead.vehicle || linkedVehicleTitle || "No vehicle selected"}
                 </p>
               </div>
 
-              <select
-                value={leadStatus}
-                onChange={async (e) => {
-                  const newStatus = e.target.value;
-                  setLeadStatus(newStatus);
-
-                  const { error } = await supabase
-                    .from("leads")
-                    .update({ status: newStatus })
-                    .eq("id", leadId)
-                    .eq("company_id", profile?.company_id);
-
-                  if (error) {
-                    alert("Error updating lead status: " + error.message);
-                    return;
-                  }
-
-                  await addActivity(
-                    "Lead Status Updated",
-                    `Status changed to ${newStatus}`,
-                    "status",
-                    "blue"
-                  );
-                }}
-                className="rounded-full border border-blue-300 bg-blue-100 px-4 py-2 text-sm brand-accent-text"
-              >
-                <option>New Lead</option>
-                <option>Attempted Contact</option>
-                <option>Interested</option>
-                <option>Test Drive Booked</option>
-                <option>Finance Docs Pending</option>
-                <option>Submitted to Finance</option>
-                <option>Approved</option>
-                <option>Declined</option>
-                <option>Deal Closed</option>
-              </select>
-            </div>
-
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <div>
-  <p className="text-sm text-slate-500">Phone Number</p>
-
-  {lead.phone ? (
-    <WriteAccessGuard
-      fallback={
-        <p className="mt-1 text-lg font-medium text-slate-800">
-          {lead.phone}
-        </p>
-      }
-    >
-      <button
-        type="button"
-        onClick={startCustomerCall}
-        className="mt-1 text-left text-lg font-medium text-blue-700 hover:text-blue-500 hover:underline"
-        title="Call customer and log the outcome"
-      >
-        {lead.phone}
-      </button>
-    </WriteAccessGuard>
-  ) : (
-    <p className="mt-1 text-lg font-medium text-slate-500">
-      No phone captured
-    </p>
-  )}
-</div>
-
-              <div>
-                <p className="text-sm text-slate-500">Assigned To</p>
-
-                {profile?.role === "Admin" || profile?.role === "Manager" ? (
-                  <select
-                    value={assignedUserId}
-                    onChange={(e) => {
-                      const newUserId = Number(e.target.value);
-                      setAssignedUserId(newUserId);
-                      reassignLead(newUserId);
-                    }}
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-slate-800"
-                  >
-                    <option value="">Unassigned</option>
-                    {salesUsers.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.full_name || user.email} ({user.role})
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="mt-1 text-lg font-medium text-slate-800">
-                    {lead.assigned_user_name ||
-                      lead.salesperson ||
-                      "Unassigned"}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <p className="text-sm text-slate-500">Budget</p>
-                <p className="mt-1 text-lg font-medium text-slate-800">
-                  {lead.budget || "Not captured"}
+              <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur xl:text-right">
+                <p className="text-xs font-bold uppercase tracking-wide text-white/60">
+                  Lead Status
                 </p>
-              </div>
 
-              <div>
-                <p className="text-sm text-slate-500">Finance Status</p>
-                <span className="mt-1 inline-block rounded-full bg-orange-100 px-3 py-1 text-sm text-orange-700">
-                  {lead.finance || "Not Submitted"}
-                </span>
+                <select
+                  value={leadStatus}
+                  onChange={async (e) => {
+                    const newStatus = e.target.value;
+                    setLeadStatus(newStatus);
+
+                    const { error } = await supabase
+                      .from("leads")
+                      .update({ status: newStatus })
+                      .eq("id", leadId)
+                      .eq("company_id", profile?.company_id);
+
+                    if (error) {
+                      alert("Error updating lead status: " + error.message);
+                      return;
+                    }
+
+                    await addActivity(
+                      "Lead Status Updated",
+                      `Status changed to ${newStatus}`,
+                      "status",
+                      "blue"
+                    );
+                  }}
+                  className="mt-2 w-full rounded-2xl border border-white/20 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-4 focus:ring-blue-300/40"
+                >
+                  <option>New Lead</option>
+                  <option>Attempted Contact</option>
+                  <option>Interested</option>
+                  <option>Test Drive Booked</option>
+                  <option>Finance Docs Pending</option>
+                  <option>Submitted to Finance</option>
+                  <option>Approved</option>
+                  <option>Declined</option>
+                  <option>Deal Closed</option>
+                </select>
               </div>
             </div>
           </div>
 
-          <div className="rounded-xl bg-white p-6 shadow">
+          <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                Phone Number
+              </p>
+
+              {lead.phone ? (
+                <WriteAccessGuard
+                  fallback={
+                    <p className="mt-2 text-base font-bold text-slate-900">
+                      {lead.phone}
+                    </p>
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={startCustomerCall}
+                    className="mt-2 text-left text-base font-bold text-blue-700 hover:text-blue-500 hover:underline"
+                    title="Call customer and log the outcome"
+                  >
+                    {lead.phone}
+                  </button>
+                </WriteAccessGuard>
+              ) : (
+                <p className="mt-2 text-base font-bold text-slate-500">
+                  No phone captured
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                Assigned To
+              </p>
+
+              {profile?.role === "Admin" || profile?.role === "Manager" ? (
+                <select
+                  value={assignedUserId}
+                  onChange={(e) => {
+                    const newUserId = Number(e.target.value);
+                    setAssignedUserId(newUserId);
+                    reassignLead(newUserId);
+                  }}
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                >
+                  <option value="">Unassigned</option>
+                  {salesUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.full_name || user.email} ({user.role})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="mt-2 text-base font-bold text-slate-900">
+                  {lead.assigned_user_name ||
+                    lead.salesperson ||
+                    "Unassigned"}
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                Budget
+              </p>
+              <p className="mt-2 text-base font-bold text-slate-900">
+                {lead.budget || "Not captured"}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                Finance Status
+              </p>
+              <span className="mt-2 inline-flex rounded-full bg-orange-100 px-3 py-1 text-sm font-bold text-orange-700">
+                {lead.finance || "Not Submitted"}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-3 border-t border-slate-100 bg-slate-50/70 p-5 sm:grid-cols-2 xl:grid-cols-4">
+            {leadReadinessItems.map((item) => (
+              <div
+                key={item.label}
+                className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200"
+              >
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
+                    {item.value}
+                  </p>
+                </div>
+
+                <span
+                  className={`h-3 w-3 rounded-full ${
+                    item.good ? "bg-emerald-500" : "bg-orange-400"
+                  }`}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(340px,0.95fr)]">
+        <div className="space-y-6">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-slate-800">
+                <div className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-700">
+                  Customer contact
+                </div>
+                <h2 className="mt-3 text-2xl font-black text-slate-900">
                   Communication Assist
                 </h2>
-                <p className="text-sm text-slate-500">
-                  Track every customer contact attempt, even when WhatsApp, email or calls happen outside DealFlow.
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                  Start WhatsApp, email or call actions, then resolve the outcome so managers can see what still needs attention.
                 </p>
               </div>
 
@@ -3557,7 +3640,7 @@ async function fetchAffordabilityAssessments() {
                 <button
                   type="button"
                   onClick={() => openCommunicationModal("WhatsApp", "follow_up")}
-                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
+                  className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
                 >
                   Send WhatsApp
                 </button>
@@ -3565,7 +3648,7 @@ async function fetchAffordabilityAssessments() {
                 <button
                   type="button"
                   onClick={() => openCommunicationModal("Email", "follow_up")}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
                 >
                   Send Email
                 </button>
@@ -3573,7 +3656,7 @@ async function fetchAffordabilityAssessments() {
                 <button
                   type="button"
                   onClick={startCustomerCall}
-                  className="rounded-lg brand-accent-bg px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded-xl brand-accent-bg px-4 py-2 text-sm font-semibold text-white"
                 >
                   Call
                 </button>
@@ -3591,7 +3674,7 @@ async function fetchAffordabilityAssessments() {
                     setCommunicationFollowUpDate("");
                     setShowCommunicationOutcomeModal(true);
                   }}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Log Reply / Outcome
                 </button>
@@ -3621,11 +3704,7 @@ async function fetchAffordabilityAssessments() {
                   Pending Outcomes
                 </p>
                 <p className="mt-1 text-2xl font-bold text-orange-800">
-                  {
-                    communicationLogs.filter(
-                      (log) => (log.send_status || "Pending Outcome") === "Pending Outcome"
-                    ).length
-                  }
+                  {pendingCommunicationOutcomeCount}
                 </p>
                 <p className="text-xs text-orange-700">
                   Started actions still needing confirmation
@@ -3708,7 +3787,11 @@ async function fetchAffordabilityAssessments() {
                           onClick={() => {
                             setActiveCommunicationLog(log);
                             setCommunicationChannel(
-                              log.channel === "Email" ? "Email" : "WhatsApp"
+                              log.channel === "Email"
+                                ? "Email"
+                                : log.channel === "Call"
+                                ? "Call"
+                                : "WhatsApp"
                             );
                             setCommunicationOutcome("Sent");
                             setCommunicationSummary("");
@@ -3716,7 +3799,7 @@ async function fetchAffordabilityAssessments() {
                             setCommunicationFollowUpDate("");
                             setShowCommunicationOutcomeModal(true);
                           }}
-                          className="rounded-lg bg-orange-600 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-500"
+                          className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-500"
                         >
                           Resolve
                         </button>
@@ -3728,7 +3811,7 @@ async function fetchAffordabilityAssessments() {
             </div>
           </div>
 
-          <div className="rounded-xl bg-white p-6 shadow">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-slate-800">
@@ -3774,7 +3857,7 @@ async function fetchAffordabilityAssessments() {
                 </p>
                 <button
                   onClick={() => setShowVehicleLinkModal(true)}
-                  className="mt-5 rounded-lg brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
+                  className="mt-5 rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
                 >
                   Link Vehicle from Inventory
                 </button>
@@ -3863,14 +3946,14 @@ async function fetchAffordabilityAssessments() {
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Link
                       href="/inventory"
-                      className="rounded-lg brand-primary-bg px-4 py-2 text-sm font-semibold text-white"
+                      className="rounded-xl brand-primary-bg px-4 py-2 text-sm font-semibold text-white"
                     >
                       Open Inventory
                     </Link>
 
                     <button
                       onClick={() => setShowVehicleLinkModal(true)}
-                      className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     >
                       Change Linked Vehicle
                     </button>
@@ -3880,10 +3963,20 @@ async function fetchAffordabilityAssessments() {
             )}
           </div>
 
-          <div className="rounded-xl bg-white p-6 shadow">
-            <h2 className="text-2xl font-bold text-slate-800">
-              Activity Timeline
-            </h2>
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Audit trail
+                </p>
+                <h2 className="mt-2 text-2xl font-black text-slate-900">
+                  Activity Timeline
+                </h2>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                {timeline.length} item{timeline.length === 1 ? "" : "s"}
+              </span>
+            </div>
 
             <div className="mt-6 space-y-5">
               {timeline.length === 0 && (
@@ -3912,9 +4005,15 @@ async function fetchAffordabilityAssessments() {
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-xl bg-white p-6 shadow">
-            <h2 className="text-xl font-bold text-slate-800">Quick Actions</h2>
+        <div className="space-y-6 xl:sticky xl:top-24 xl:self-start">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                Next best actions
+              </p>
+              <h2 className="mt-2 text-xl font-black text-slate-900">Quick Actions</h2>
+              <p className="mt-1 text-sm text-slate-500">Choose the next step for this lead.</p>
+            </div>
 
             <div className="mt-5 space-y-3">
              <button
@@ -3937,14 +4036,14 @@ async function fetchAffordabilityAssessments() {
 
               <button
                 onClick={() => openCommunicationModal("WhatsApp", "follow_up")}
-                className="w-full rounded-lg bg-green-600 px-4 py-3 text-white hover:bg-green-500"
+                className="w-full rounded-xl bg-green-600 px-4 py-3 text-white hover:bg-green-500"
               >
                 Send WhatsApp Assist
               </button>
 
               <button
                 onClick={() => openCommunicationModal("Email", "follow_up")}
-                className="w-full rounded-lg bg-blue-600 px-4 py-3 text-white hover:bg-blue-500"
+                className="w-full rounded-xl bg-blue-600 px-4 py-3 text-white hover:bg-blue-500"
               >
                 Send Email Assist
               </button>
@@ -3953,7 +4052,7 @@ async function fetchAffordabilityAssessments() {
   <button
     type="button"
     onClick={startCustomerCall}
-    className="w-full rounded-lg brand-accent-bg px-4 py-3 text-white"
+    className="w-full rounded-xl brand-accent-bg px-4 py-3 text-white"
   >
     Call and Track Outcome
   </button>
@@ -3961,7 +4060,7 @@ async function fetchAffordabilityAssessments() {
 
               <button
                 onClick={() => setShowVehicleLinkModal(true)}
-                className="w-full rounded-lg bg-blue-600 px-4 py-3 text-white hover:bg-blue-500"
+                className="w-full rounded-xl bg-blue-600 px-4 py-3 text-white hover:bg-blue-500"
               >
                 {linkedVehicle ? "Change Linked Vehicle" : "Link Vehicle"}
               </button>
@@ -3970,7 +4069,7 @@ async function fetchAffordabilityAssessments() {
                 <>
                   <Link
                     href={`/deals/${linkedDealSnapshot.id}`}
-                    className="block w-full rounded-lg bg-slate-900 px-4 py-3 text-center text-white hover:bg-slate-700"
+                    className="block w-full rounded-xl bg-slate-900 px-4 py-3 text-center text-white hover:bg-slate-700"
                   >
                     Open Deal #{linkedDealSnapshot.id}
                   </Link>
@@ -3979,7 +4078,7 @@ async function fetchAffordabilityAssessments() {
                     <button
                       type="button"
                       onClick={openDealModal}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-700 hover:bg-slate-50"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-700 hover:bg-slate-50"
                     >
                       Update Deal Details
                     </button>
@@ -3991,7 +4090,7 @@ async function fetchAffordabilityAssessments() {
                     type="button"
                     onClick={openDealModal}
                     disabled={loadingLinkedDeal}
-                    className="w-full rounded-lg bg-purple-600 px-4 py-3 text-white hover:bg-purple-500 disabled:opacity-60"
+                    className="w-full rounded-xl bg-purple-600 px-4 py-3 text-white hover:bg-purple-500 disabled:opacity-60"
                   >
                     {loadingLinkedDeal
                       ? "Checking Deal..."
@@ -4004,7 +4103,7 @@ async function fetchAffordabilityAssessments() {
                 profile?.role === "Sales" ? null : (
                   <Link
                     href={`/finance/${financeApplicationId}`}
-                    className="block w-full rounded-lg brand-primary-bg px-4 py-3 text-center text-white"
+                    className="block w-full rounded-xl brand-primary-bg px-4 py-3 text-center text-white"
                   >
                     Open Finance Application
                   </Link>
@@ -4013,7 +4112,7 @@ async function fetchAffordabilityAssessments() {
                 <button
                   type="button"
                   onClick={() => void submitToFinance()}
-                  className="w-full rounded-lg bg-green-600 px-4 py-3 text-white hover:bg-green-500"
+                  className="w-full rounded-xl bg-green-600 px-4 py-3 text-white hover:bg-green-500"
                 >
                   Submit to Finance
                 </button>
@@ -4022,7 +4121,7 @@ async function fetchAffordabilityAssessments() {
           </div>
 
           {linkedDealSnapshot && (
-            <div className="rounded-xl bg-white p-6 shadow">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-bold text-slate-800">
@@ -4140,7 +4239,7 @@ async function fetchAffordabilityAssessments() {
           )}
 
           {financeApplicationId && (
-            <div className="rounded-xl bg-white p-6 shadow">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-bold text-slate-800">
@@ -4268,9 +4367,9 @@ async function fetchAffordabilityAssessments() {
             </div>
           )}
 
-          <div className="rounded-xl bg-white p-6 shadow">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
   
-  <div className="rounded-xl bg-white p-6 shadow">
+  <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
   <div className="flex items-start justify-between gap-4">
     <div>
       <h2 className="text-xl font-bold text-slate-800">
@@ -4316,7 +4415,7 @@ async function fetchAffordabilityAssessments() {
 
       <Link
         href="/inventory"
-        className="mt-4 inline-flex rounded-lg brand-primary-bg px-4 py-2 text-sm font-semibold text-white"
+        className="mt-4 inline-flex rounded-xl brand-primary-bg px-4 py-2 text-sm font-semibold text-white"
       >
         Open Inventory
       </Link>
@@ -4447,7 +4546,7 @@ async function fetchAffordabilityAssessments() {
                         <div className="mt-4 flex flex-wrap gap-2">
                           <Link
                             href={`/inventory/${vehicle.id}`}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                           >
                             View Vehicle
                           </Link>
@@ -4459,7 +4558,7 @@ async function fetchAffordabilityAssessments() {
                               onClick={() =>
                                 linkInventoryVehicleById(vehicle.id)
                               }
-                              className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+                              className="rounded-xl bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-60"
                             >
                               {linkingVehicle
                                 ? "Linking..."
@@ -4490,7 +4589,7 @@ async function fetchAffordabilityAssessments() {
     </p>
   </div>
 
-<div className="rounded-xl bg-white p-6 shadow">
+<div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
   <div className="flex items-start justify-between gap-4">
     <div>
       <h2 className="text-xl font-bold text-slate-800">
@@ -4647,7 +4746,7 @@ async function fetchAffordabilityAssessments() {
         onChange={(e) =>
           setTargetMonthlyInstallment(e.target.value)
         }
-        className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+        className="mt-1 w-full rounded-xl border border-slate-300 p-3"
       />
     </div>
 
@@ -4662,7 +4761,7 @@ async function fetchAffordabilityAssessments() {
         step="1000"
         value={deposit}
         onChange={(e) => setDeposit(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+        className="mt-1 w-full rounded-xl border border-slate-300 p-3"
       />
     </div>
 
@@ -4678,7 +4777,7 @@ async function fetchAffordabilityAssessments() {
           step="0.1"
           value={interestRate}
           onChange={(e) => setInterestRate(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+          className="mt-1 w-full rounded-xl border border-slate-300 p-3"
         />
       </div>
 
@@ -4690,7 +4789,7 @@ async function fetchAffordabilityAssessments() {
         <select
           value={termMonths}
           onChange={(e) => setTermMonths(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+          className="mt-1 w-full rounded-xl border border-slate-300 p-3"
         >
           <option value="12">12 months</option>
           <option value="24">24 months</option>
@@ -4711,7 +4810,7 @@ async function fetchAffordabilityAssessments() {
       <select
         value={balloonPercentage}
         onChange={(e) => setBalloonPercentage(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+        className="mt-1 w-full rounded-xl border border-slate-300 p-3"
       >
         <option value="0">No balloon</option>
         <option value="10">10%</option>
@@ -4840,7 +4939,7 @@ async function fetchAffordabilityAssessments() {
     value={assessmentNotes}
     onChange={(e) => setAssessmentNotes(e.target.value)}
     placeholder="Add affordability notes, customer preferences or conditions..."
-    className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 p-3"
+    className="mt-1 min-h-24 w-full rounded-xl border border-slate-300 p-3"
   />
 </div>
 
@@ -4858,7 +4957,7 @@ async function fetchAffordabilityAssessments() {
 </WriteAccessGuard>
 </div>
 
-<div className="rounded-xl bg-white p-6 shadow">
+<div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
   <div className="flex items-start justify-between gap-4">
     <div>
       <h2 className="text-xl font-bold text-slate-800">
@@ -4945,7 +5044,7 @@ async function fetchAffordabilityAssessments() {
   </div>
 </div>
 
-          <div className="rounded-xl bg-white p-6 shadow">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-800">
@@ -4969,7 +5068,7 @@ async function fetchAffordabilityAssessments() {
                 <select
                   value={documentType}
                   onChange={(e) => setDocumentType(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-slate-800"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-slate-800"
                 >
                   <option>ID Copy</option>
                   <option>Proof of Address</option>
@@ -4983,7 +5082,7 @@ async function fetchAffordabilityAssessments() {
                 </select>
               </div>
 
-              <label className="block w-full cursor-pointer rounded-lg brand-primary-bg px-4 py-3 text-center text-sm font-semibold text-white hover:opacity-90">
+              <label className="block w-full cursor-pointer rounded-xl brand-primary-bg px-4 py-3 text-center text-sm font-semibold text-white hover:opacity-90">
                 {uploadingDocument
                   ? "Uploading Document..."
                   : "Upload Document"}
@@ -5048,7 +5147,7 @@ async function fetchAffordabilityAssessments() {
         "view"
       )
     }
-    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-100"
+    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-100"
   >
     View
   </button>
@@ -5061,7 +5160,7 @@ async function fetchAffordabilityAssessments() {
         "download"
       )
     }
-    className="rounded-lg brand-primary-bg px-3 py-2 text-center text-sm font-medium text-white"
+    className="rounded-xl brand-primary-bg px-3 py-2 text-center text-sm font-medium text-white"
   >
     Download
   </button>
@@ -5072,7 +5171,7 @@ async function fetchAffordabilityAssessments() {
             </div>
           </div>
 
-          <div className="rounded-xl bg-white p-6 shadow">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-800">
                 Follow-Up Tasks
@@ -5085,7 +5184,7 @@ async function fetchAffordabilityAssessments() {
 
             <div className="mt-5 space-y-4">
               {leadTasks.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-300 p-5 text-center">
+                <div className="rounded-2xl border border-dashed border-slate-300 p-5 text-center">
                   <p className="text-sm font-medium text-slate-600">
                     No follow-up tasks yet.
                   </p>
@@ -5165,6 +5264,7 @@ async function fetchAffordabilityAssessments() {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       {showDealModal && (
@@ -5408,7 +5508,7 @@ async function fetchAffordabilityAssessments() {
                     e.target.value === "" ? "" : Number(e.target.value)
                   )
                 }
-                className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                className="mt-1 w-full rounded-xl border border-slate-300 p-3"
               >
                 <option value="">Select vehicle...</option>
                 {inventoryVehicles.map((vehicle) => (
@@ -5560,7 +5660,7 @@ async function fetchAffordabilityAssessments() {
                       setCommunicationMessage(template.body);
                     }
                   }}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
                 >
                   <option>WhatsApp</option>
                   <option>Email</option>
@@ -5576,7 +5676,7 @@ async function fetchAffordabilityAssessments() {
                   onChange={(event) =>
                     handleCommunicationTemplateChange(event.target.value)
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
                 >
                   {COMMUNICATION_TEMPLATES.map((template) => (
                     <option
@@ -5599,7 +5699,7 @@ async function fetchAffordabilityAssessments() {
                   type="text"
                   value={communicationSubject}
                   onChange={(event) => setCommunicationSubject(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
                 />
               </div>
             )}
@@ -5612,7 +5712,7 @@ async function fetchAffordabilityAssessments() {
                 value={communicationMessage}
                 onChange={(event) => setCommunicationMessage(event.target.value)}
                 rows={8}
-                className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                className="mt-1 w-full rounded-xl border border-slate-300 p-3"
               />
             </div>
 
@@ -5626,7 +5726,7 @@ async function fetchAffordabilityAssessments() {
                 type="button"
                 disabled={savingCommunication}
                 onClick={() => setShowCommunicationModal(false)}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700 disabled:opacity-50"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-slate-700 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -5635,7 +5735,7 @@ async function fetchAffordabilityAssessments() {
                 type="button"
                 disabled={savingCommunication}
                 onClick={startCommunicationAction}
-                className="rounded-lg bg-slate-900 px-5 py-2 font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+                className="rounded-xl bg-slate-900 px-5 py-2 font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
               >
                 {savingCommunication
                   ? "Starting..."
@@ -5722,7 +5822,7 @@ async function fetchAffordabilityAssessments() {
                       event.target.value as "WhatsApp" | "Email" | "Call"
                     )
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
                 >
                   <option>WhatsApp</option>
                   <option>Email</option>
@@ -5738,7 +5838,7 @@ async function fetchAffordabilityAssessments() {
               <select
                 value={communicationOutcome}
                 onChange={(event) => setCommunicationOutcome(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                className="mt-1 w-full rounded-xl border border-slate-300 p-3"
               >
                 {activeCommunicationLog && (
                   <option value="Not Sent">Not Sent</option>
@@ -5762,7 +5862,7 @@ async function fetchAffordabilityAssessments() {
                   onChange={(event) => setCommunicationMessage(event.target.value)}
                   placeholder="Paste or summarise the customer reply if useful..."
                   rows={4}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
                 />
               </div>
             )}
@@ -5776,7 +5876,7 @@ async function fetchAffordabilityAssessments() {
                 onChange={(event) => setCommunicationSummary(event.target.value)}
                 placeholder="What happened and what must happen next?"
                 rows={4}
-                className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                className="mt-1 w-full rounded-xl border border-slate-300 p-3"
               />
             </div>
 
@@ -5807,7 +5907,7 @@ async function fetchAffordabilityAssessments() {
                   onChange={(event) =>
                     setCommunicationFollowUpDate(event.target.value)
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
                 />
               </div>
             )}
@@ -5820,7 +5920,7 @@ async function fetchAffordabilityAssessments() {
                   setShowCommunicationOutcomeModal(false);
                   setActiveCommunicationLog(null);
                 }}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700 disabled:opacity-50"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-slate-700 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -5833,7 +5933,7 @@ async function fetchAffordabilityAssessments() {
                     ? resolveCommunicationOutcome
                     : saveManualCommunicationLog
                 }
-                className="rounded-lg bg-slate-900 px-5 py-2 font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+                className="rounded-xl bg-slate-900 px-5 py-2 font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
               >
                 {savingCommunication ? "Saving..." : "Save Outcome"}
               </button>
@@ -5844,7 +5944,7 @@ async function fetchAffordabilityAssessments() {
 
       {showCallModal && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-sm-2xl">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">
@@ -5912,7 +6012,7 @@ async function fetchAffordabilityAssessments() {
             type="datetime-local"
             value={callFollowUpDate}
             onChange={(e) => setCallFollowUpDate(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
           />
 
           <p className="mt-2 text-xs text-slate-500">
@@ -5925,7 +6025,7 @@ async function fetchAffordabilityAssessments() {
         value={callNotes}
         onChange={(e) => setCallNotes(e.target.value)}
         placeholder="Add call notes..."
-        className="mt-5 w-full rounded-lg border border-slate-300 p-3"
+        className="mt-5 w-full rounded-xl border border-slate-300 p-3"
         rows={4}
       />
 
@@ -5939,7 +6039,7 @@ async function fetchAffordabilityAssessments() {
             setCallNotes("");
             setCallFollowUpDate("");
           }}
-          className="rounded-lg border border-slate-300 px-4 py-2 disabled:opacity-50"
+          className="rounded-xl border border-slate-300 px-4 py-2 disabled:opacity-50"
         >
           Cancel
         </button>
@@ -5948,7 +6048,7 @@ async function fetchAffordabilityAssessments() {
           type="button"
           onClick={saveCallLog}
           disabled={savingCall}
-          className="rounded-lg brand-accent-bg px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl brand-accent-bg px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
           {savingCall ? "Saving..." : "Save Call Log"}
         </button>
@@ -5959,7 +6059,7 @@ async function fetchAffordabilityAssessments() {
 
       {showTaskModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm-2xl">
             <h2 className="text-2xl font-bold text-slate-800">
               Create Follow-Up Task
             </h2>
@@ -5978,7 +6078,7 @@ async function fetchAffordabilityAssessments() {
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
                   placeholder="e.g. Call customer about finance docs"
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
                 />
               </div>
 
@@ -5990,7 +6090,7 @@ async function fetchAffordabilityAssessments() {
                   value={taskDescription}
                   onChange={(e) => setTaskDescription(e.target.value)}
                   placeholder="Additional task notes..."
-                  className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 min-h-24 w-full rounded-xl border border-slate-300 p-3"
                 />
               </div>
 
@@ -6002,7 +6102,7 @@ async function fetchAffordabilityAssessments() {
                   type="datetime-local"
                   value={taskDueDate}
                   onChange={(e) => setTaskDueDate(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
                 />
               </div>
 
@@ -6013,7 +6113,7 @@ async function fetchAffordabilityAssessments() {
                 <select
                   value={taskPriority}
                   onChange={(e) => setTaskPriority(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
                 >
                   <option>Low</option>
                   <option>Medium</option>
@@ -6037,7 +6137,7 @@ async function fetchAffordabilityAssessments() {
             : Number(event.target.value)
         )
       }
-      className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+      className="mt-1 w-full rounded-xl border border-slate-300 p-3"
     >
       <option value="">
         Select active user...
@@ -6075,14 +6175,14 @@ async function fetchAffordabilityAssessments() {
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setShowTaskModal(false)}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
 
               <button
                 onClick={createTask}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-white hover:bg-slate-700"
+                className="rounded-xl bg-slate-900 px-4 py-2 text-white hover:bg-slate-700"
               >
                 Save Task
               </button>
