@@ -114,39 +114,45 @@ export default function PipelinePage() {
     <PageAccessGuard module="pipeline">
       
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800">
-              Sales Pipeline
-            </h1>
-            <p className="text-slate-500">
-              Visual dealership lead workflow management
-            </p>
-          </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-700">
+                Pipeline view
+              </p>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              type="text"
-              placeholder="Search leads, vehicles or salesperson..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm shadow-sm sm:w-96"
-            />
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                Sales Pipeline
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                Visual dealership lead workflow management across every sales stage.
+              </p>
+            </div>
 
-            <Link
-              href="/leads"
-              className="rounded-xl px-5 py-3 text-center text-sm font-semibold text-white shadow-sm transition"
-              style={{ backgroundColor: "var(--brand-primary)" }}
-            >
-              + Add / View Leads
-            </Link>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                type="text"
+                placeholder="Search leads, vehicles or salesperson..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:w-96"
+              />
+
+              <Link
+                href="/leads"
+                className="rounded-2xl px-5 py-3 text-center text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5"
+                style={{ backgroundColor: "var(--brand-primary)" }}
+              >
+                + Add / View Leads
+              </Link>
+            </div>
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">Total Pipeline</p>
-            <h2 className="mt-2 text-3xl font-bold text-slate-900">
+            <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
               {totalLeads}
             </h2>
           </div>
@@ -267,7 +273,7 @@ export default function PipelinePage() {
                             <div className="mt-5">
                               <Link
                                 href={`/leads/${lead.id}`}
-                                className="block rounded-lg bg-slate-900 px-4 py-2 text-center text-sm text-white transition hover:bg-slate-700"
+                                className="block rounded-2xl bg-slate-900 px-4 py-2 text-center text-sm text-white transition hover:bg-slate-700"
                               >
                                 Open Lead
                               </Link>

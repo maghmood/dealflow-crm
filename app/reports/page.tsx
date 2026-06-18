@@ -1519,20 +1519,24 @@ function exportAffordabilityCsv() {
   <DashboardLayout>
     <PageAccessGuard module="reports">
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Reports</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Dealership performance, pipeline, finance and operational
-              reporting.
-            </p>
-          </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-700">
+                Business insight
+              </p>
+
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Reports</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                Dealership performance, pipeline, finance and operational reporting.
+              </p>
+            </div>
 
           <div className="flex flex-col gap-3 sm:flex-row no-print">
   <select
     value={dateFilter}
     onChange={(e) => setDateFilter(e.target.value)}
-    className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+    className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 font-semibold text-slate-700"
   >
     {DATE_FILTERS.map((filter) => (
       <option key={filter}>{filter}</option>
@@ -1541,20 +1545,22 @@ function exportAffordabilityCsv() {
 
   <button
     onClick={fetchReportsData}
-    className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
+    className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
   >
     Refresh
   </button>
 
   <button
     onClick={exportFullReportPdf}
-    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500"
+    className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500"
   >
     Export PDF
   </button>
 </div>
+          </div>
+        </div>
 
-<div className="no-print rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+<div className="no-print rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
   <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
     <div>
       <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
@@ -1616,10 +1622,9 @@ function exportAffordabilityCsv() {
     </div>
   </div>
 </div>
-        </div>
 
        {loading ? (
-  <div className="rounded-2xl bg-white p-8 text-slate-500 shadow-sm ring-1 ring-slate-200">
+  <div className="rounded-3xl border border-slate-200 bg-white p-8 text-slate-500 shadow-sm">
     Loading reports...
   </div>
 ) : (
@@ -1733,7 +1738,7 @@ function exportAffordabilityCsv() {
             </div>
 
             <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-              <div className="print-section rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="print-section rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">
@@ -1804,7 +1809,7 @@ function exportAffordabilityCsv() {
                 </div>
               </div>
 
-              <div className="print-section rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="print-section rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">
@@ -2149,7 +2154,7 @@ function exportAffordabilityCsv() {
 </div>
 </div>
             <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className="print-section print-page rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="print-section print-page rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">
@@ -2371,7 +2376,7 @@ function exportAffordabilityCsv() {
             </div>
 
             <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-              <div className="print-section rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="print-section rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-900">
                   Recent Delivered Deals
                 </h2>
@@ -2413,7 +2418,7 @@ function exportAffordabilityCsv() {
 
                         <Link
                           href={`/deals/${deal.id}`}
-                          className="mt-4 inline-flex rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
+                          className="mt-4 inline-flex rounded-2xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
                         >
                           Open Deal
                         </Link>
@@ -2423,7 +2428,7 @@ function exportAffordabilityCsv() {
                 </div>
               </div>
 
-              <div className="print-section rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="print-section rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-900">
                   Report Notes
                 </h2>
@@ -2602,7 +2607,7 @@ function MetricCard({
       : "text-slate-900";
 
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-sm text-slate-500">{label}</p>
       <h2 className={`mt-2 truncate text-2xl font-extrabold ${colorClass}`}>
         {value}
@@ -2619,7 +2624,7 @@ function ReportCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="print-section rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+    <div className="print-section rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="text-lg font-bold text-slate-900">{title}</h2>
       <div className="mt-5">{children}</div>
     </div>

@@ -263,21 +263,28 @@ export default function DocumentsPage() {
   <DashboardLayout>
     <PageAccessGuard module="documents">
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800">Documents</h1>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-700">
+                Document control
+              </p>
 
-            <p className="text-slate-500">
-              Finance, lead, deal and dealership document management
-            </p>
-          </div>
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                Documents
+              </h1>
+
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                View, filter and upload finance, lead, deal and dealership documents from one secure library.
+              </p>
+            </div>
 
                     <WriteAccessGuard>
             <div className="flex flex-col gap-3 sm:flex-row">
               <select
                 value={documentType}
                 onChange={(e) => setDocumentType(e.target.value)}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm"
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               >
                 {DOCUMENT_TYPES.map((type) => (
                   <option key={type}>{type}</option>
@@ -302,6 +309,7 @@ export default function DocumentsPage() {
               </label>
             </div>
           </WriteAccessGuard>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-7">
@@ -329,13 +337,13 @@ export default function DocumentsPage() {
               placeholder="Search customer, document, type, lead #, deal # or vehicle #..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             />
 
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option value="All">All Statuses</option>
               <option value="Pending">Pending</option>
@@ -347,7 +355,7 @@ export default function DocumentsPage() {
             <select
               value={linkFilter}
               onChange={(e) => setLinkFilter(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option>All Links</option>
               <option>Deal</option>

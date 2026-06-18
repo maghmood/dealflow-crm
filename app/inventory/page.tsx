@@ -614,43 +614,50 @@ export default function InventoryPage() {
   <DashboardLayout>
     <PageAccessGuard module="inventory">
       <div className="space-y-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-slate-900">
-                Inventory
-              </h1>
-              <span className="rounded-full bg-slate-200 px-3 py-1 text-sm font-bold text-slate-700">
-                {totalVehicles}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-slate-500">
-              {canEditInventory
-                ? "Manage vehicle stock, availability and lead links"
-                : "Browse current dealership inventory"}
-            </p>
-
-            {!canEditInventory && (
-              <p className="mt-2 inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                View only — inventory changes are managed by Admin or Manager
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-purple-700">
+                Vehicle stock
               </p>
-            )}
-          </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-              Export
-            </button>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-black tracking-tight text-slate-950">
+                  Inventory
+                </h1>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">
+                  {totalVehicles} total
+                </span>
+              </div>
 
-            {canEditInventory && (
-              <button
-                type="button"
-                onClick={openCreateVehicleModal}
-                className="rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-              >
-                + Add Vehicle
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                {canEditInventory
+                  ? "Manage vehicle stock, availability and lead links."
+                  : "Browse current dealership inventory."}
+              </p>
+
+              {!canEditInventory && (
+                <p className="mt-3 inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  View only — inventory changes are managed by Admin or Manager
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                Export
               </button>
-            )}
+
+              {canEditInventory && (
+                <button
+                  type="button"
+                  onClick={openCreateVehicleModal}
+                  className="rounded-2xl brand-primary-bg px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:opacity-90"
+                >
+                  + Add Vehicle
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -701,13 +708,13 @@ export default function InventoryPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search stock code, make, model, VIN, registration or customer..."
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             />
 
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option>All Status</option>
               {STATUS_OPTIONS.map((status) => (
@@ -718,7 +725,7 @@ export default function InventoryPage() {
             <select
               value={locationFilter}
               onChange={(e) => setLocationFilter(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option>All Locations</option>
               {locations.map((location) => (
@@ -729,7 +736,7 @@ export default function InventoryPage() {
             <select
               value={sortMode}
               onChange={(e) => setSortMode(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option>Newest First</option>
               <option>Price Low to High</option>
@@ -766,7 +773,7 @@ export default function InventoryPage() {
         </div>
 
         {loading ? (
-          <div className="rounded-2xl bg-white p-8 text-slate-500 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-slate-500 shadow-sm">
             Loading inventory...
           </div>
         ) : filteredVehicles.length === 0 ? (
@@ -781,7 +788,7 @@ export default function InventoryPage() {
               <button
                 type="button"
                 onClick={openCreateVehicleModal}
-                className="mt-5 rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
+                className="mt-5 rounded-2xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
               >
                 + Add Vehicle
               </button>
@@ -1097,7 +1104,7 @@ export default function InventoryPage() {
                   rounded="16px"
                 />
 
-                <label className="mt-4 block cursor-pointer rounded-xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-blue-500">
+                <label className="mt-4 block cursor-pointer rounded-2xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-blue-500">
                   {uploadingImage ? "Uploading..." : "Upload Vehicle Image"}
                   <input
                     type="file"
@@ -1126,7 +1133,7 @@ export default function InventoryPage() {
                       setForm({ ...form, image_url: e.target.value })
                     }
                     placeholder="https://..."
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                   />
                   <p className="mt-2 text-xs text-slate-400">
                     Uploaded image / URL shows first. If empty, the page uses a
@@ -1146,7 +1153,7 @@ export default function InventoryPage() {
                     onChange={(e) =>
                       setForm({ ...form, stock_code: e.target.value })
                     }
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1161,7 +1168,7 @@ export default function InventoryPage() {
                       setForm({ ...form, make: e.target.value })
                     }
                     placeholder="Volkswagen"
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1176,7 +1183,7 @@ export default function InventoryPage() {
                       setForm({ ...form, model: e.target.value })
                     }
                     placeholder="Polo"
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1191,7 +1198,7 @@ export default function InventoryPage() {
                       setForm({ ...form, variant: e.target.value })
                     }
                     placeholder="1.0 TSI Life"
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1205,7 +1212,7 @@ export default function InventoryPage() {
                     onChange={(e) =>
                       setForm({ ...form, year: e.target.value })
                     }
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1219,7 +1226,7 @@ export default function InventoryPage() {
                     onChange={(e) =>
                       setForm({ ...form, mileage: e.target.value })
                     }
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1233,7 +1240,7 @@ export default function InventoryPage() {
                     onChange={(e) =>
                       setForm({ ...form, price: e.target.value })
                     }
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1247,7 +1254,7 @@ export default function InventoryPage() {
                     onChange={(e) =>
                       setForm({ ...form, cost_price: e.target.value })
                     }
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1260,7 +1267,7 @@ export default function InventoryPage() {
                     onChange={(e) =>
                       setForm({ ...form, status: e.target.value })
                     }
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   >
                     {STATUS_OPTIONS.map((status) => (
                       <option key={status}>{status}</option>
@@ -1278,7 +1285,7 @@ export default function InventoryPage() {
                     onChange={(e) =>
                       setForm({ ...form, colour: e.target.value })
                     }
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1295,7 +1302,7 @@ export default function InventoryPage() {
                         registration_number: e.target.value,
                       })
                     }
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1307,7 +1314,7 @@ export default function InventoryPage() {
                     type="text"
                     value={form.vin}
                     onChange={(e) => setForm({ ...form, vin: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1322,7 +1329,7 @@ export default function InventoryPage() {
                       setForm({ ...form, location: e.target.value })
                     }
                     placeholder="Main showroom"
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1335,7 +1342,7 @@ export default function InventoryPage() {
                     onChange={(e) =>
                       setForm({ ...form, linked_lead_id: e.target.value })
                     }
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   >
                     <option value="">No lead selected</option>
                     {leads.map((lead) => (
@@ -1359,7 +1366,7 @@ export default function InventoryPage() {
                       setForm({ ...form, notes: e.target.value })
                     }
                     placeholder="Condition notes, recon requirements, extras..."
-                    className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 min-h-24 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
               </div>
@@ -1376,7 +1383,7 @@ export default function InventoryPage() {
               <button
                 onClick={saveVehicle}
                 disabled={savingVehicle || uploadingImage}
-                className="rounded-xl bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+                className="rounded-2xl bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
               >
                 {savingVehicle ? "Saving..." : "Save Vehicle"}
               </button>

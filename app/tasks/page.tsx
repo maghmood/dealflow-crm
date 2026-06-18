@@ -556,26 +556,32 @@ export default function TasksPage() {
       <PageAccessGuard module="tasks">
         <ReadOnlyNotice />
 
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800">
-              Tasks
-            </h1>
+        <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-700">
+                Work queue
+              </p>
 
-            <p className="text-slate-500">
-              Manage follow-ups, callbacks and dealership task workflow
-            </p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                Tasks
+              </h1>
+
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                Manage follow-ups, callbacks, automation reminders and dealership task workflow.
+              </p>
+            </div>
+
+            <WriteAccessGuard>
+              <button
+                type="button"
+                onClick={openCreateTaskModal}
+                className="rounded-2xl brand-primary-bg px-5 py-3 font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:opacity-90"
+              >
+                + Create Task
+              </button>
+            </WriteAccessGuard>
           </div>
-
-          <WriteAccessGuard>
-            <button
-              type="button"
-              onClick={openCreateTaskModal}
-              className="rounded-xl brand-primary-bg px-5 py-3 font-semibold text-white"
-            >
-              + Create Task
-            </button>
-          </WriteAccessGuard>
         </div>
 
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -588,7 +594,7 @@ export default function TasksPage() {
           ].map(([label, value, className]) => (
             <div
               key={String(label)}
-              className="rounded-xl bg-white p-6 shadow"
+              className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
             >
               <p className="text-sm text-slate-500">
                 {label}
@@ -603,7 +609,7 @@ export default function TasksPage() {
           ))}
         </div>
 
-        <div className="mb-6 rounded-xl bg-white p-5 shadow">
+        <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <input
               type="text"
@@ -612,7 +618,7 @@ export default function TasksPage() {
               onChange={(event) =>
                 setSearchTerm(event.target.value)
               }
-              className="rounded-lg border border-slate-300 p-3"
+              className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             />
 
             <select
@@ -620,7 +626,7 @@ export default function TasksPage() {
               onChange={(event) =>
                 setStatusFilter(event.target.value)
               }
-              className="rounded-lg border border-slate-300 p-3"
+              className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option value="All">All Tasks</option>
               <option value="Open">Open</option>
@@ -632,7 +638,7 @@ export default function TasksPage() {
               onChange={(event) =>
                 setAutomationFilter(event.target.value)
               }
-              className="rounded-lg border border-slate-300 p-3"
+              className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option value="All">All Sources</option>
               <option value="Automated">Automated Tasks</option>
@@ -641,7 +647,7 @@ export default function TasksPage() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl bg-white shadow">
+        <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
           {loading ? (
             <div className="p-6 text-slate-500">
               Loading tasks...
@@ -812,7 +818,7 @@ export default function TasksPage() {
                                   onClick={() =>
                                     void markComplete(task)
                                   }
-                                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
+                                  className="rounded-2xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
                                 >
                                   Complete
                                 </button>
@@ -1046,7 +1052,7 @@ export default function TasksPage() {
                       onClick={() =>
                         void markComplete(selectedTask)
                       }
-                      className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
+                      className="rounded-2xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
                     >
                       Mark Complete
                     </button>
@@ -1079,7 +1085,7 @@ export default function TasksPage() {
                   onChange={(event) =>
                     setRescheduleDateTime(event.target.value)
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                 />
               </div>
 
@@ -1099,7 +1105,7 @@ export default function TasksPage() {
                   type="button"
                   onClick={() => void rescheduleTask()}
                   disabled={!rescheduleDateTime}
-                  className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-500 disabled:opacity-50"
+                  className="rounded-2xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-500 disabled:opacity-50"
                 >
                   Save New Time
                 </button>
@@ -1131,7 +1137,7 @@ export default function TasksPage() {
                     onChange={(event) =>
                       setTaskTitle(event.target.value)
                     }
-                    className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1188,7 +1194,7 @@ export default function TasksPage() {
                     onChange={(event) =>
                       setTaskDueDate(event.target.value)
                     }
-                    className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1274,7 +1280,7 @@ export default function TasksPage() {
                     onChange={(event) =>
                       setTaskDescription(event.target.value)
                     }
-                    className="mt-1 min-h-28 w-full rounded-xl border border-slate-300 p-3"
+                    className="mt-1 min-h-28 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
               </div>
@@ -1293,7 +1299,7 @@ export default function TasksPage() {
                   type="button"
                   onClick={() => void createTask()}
                   disabled={savingTask}
-                  className="rounded-xl brand-primary-bg px-5 py-3 font-semibold text-white disabled:opacity-50"
+                  className="rounded-2xl brand-primary-bg px-5 py-3 font-semibold text-white disabled:opacity-50"
                 >
                   {savingTask ? "Saving..." : "Create Task"}
                 </button>

@@ -655,7 +655,7 @@ async function createDealFromVehicle() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="rounded-2xl bg-white p-8 text-slate-500 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-3xl border border-slate-200 bg-white p-8 text-slate-500 shadow-sm">
           Loading vehicle details...
         </div>
       </DashboardLayout>
@@ -674,7 +674,7 @@ async function createDealFromVehicle() {
           </p>
           <button
             onClick={() => router.push("/inventory")}
-            className="mt-5 rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
+            className="mt-5 rounded-2xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
           >
             Back to Inventory
           </button>
@@ -691,13 +691,13 @@ return (
           <div>
             <Link
               href="/inventory"
-              className="text-sm font-semibold text-blue-700 hover:underline"
+              className="text-sm font-bold text-blue-700 hover:underline"
             >
               ← Back to Inventory
             </Link>
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-bold text-slate-900">
+              <h1 className="text-3xl font-black tracking-tight text-slate-950">
                 {title || "Vehicle Detail"}
               </h1>
 
@@ -719,7 +719,7 @@ return (
           <div className="flex flex-wrap gap-3">
   <Link
     href="/inventory"
-    className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+    className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 font-semibold text-slate-700 hover:bg-slate-50"
   >
     Inventory
   </Link>
@@ -729,7 +729,7 @@ return (
       type="button"
       onClick={createDealFromVehicle}
       disabled={saving}
-      className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+      className="rounded-2xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
     >
       {saving ? "Working..." : "Create Deal"}
     </button>
@@ -738,7 +738,7 @@ return (
   {vehicle.linked_lead_id && (
     <Link
       href={`/leads/${vehicle.linked_lead_id}`}
-      className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
+      className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
     >
       Open Linked Lead
     </Link>
@@ -812,7 +812,7 @@ return (
 
           <div className="space-y-5">
             {canEditInventory ? (
-              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-900">
                   Reservation Workflow
                 </h2>
@@ -832,7 +832,7 @@ return (
                     onChange={(event) =>
                       setSelectedLeadId(event.target.value)
                     }
-                    className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                   >
                     <option value="">No lead selected</option>
 
@@ -852,7 +852,7 @@ return (
                     type="button"
                     onClick={reserveVehicle}
                     disabled={saving}
-                    className="rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-500 disabled:opacity-60"
+                    className="rounded-2xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-500 disabled:opacity-60"
                   >
                     {saving
                       ? "Saving..."
@@ -863,7 +863,7 @@ return (
                     type="button"
                     onClick={releaseReservation}
                     disabled={saving || !vehicle.linked_lead_id}
-                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Release Reservation
                   </button>
@@ -872,7 +872,7 @@ return (
                     type="button"
                     onClick={createDealFromVehicle}
                     disabled={saving || !vehicle.linked_lead_id}
-                    className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-2xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Create Deal from Vehicle
                   </button>
@@ -882,7 +882,7 @@ return (
                       type="button"
                       onClick={() => updateVehicleStatus("Sold")}
                       disabled={saving}
-                      className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+                      className="rounded-2xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
                     >
                       Mark Sold
                     </button>
@@ -912,7 +912,7 @@ return (
               </div>
             )}
 
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-900">
                 Linked Customer / Lead
               </h2>
@@ -951,7 +951,7 @@ return (
         </div>
 
         <div className="grid gap-5 xl:grid-cols-3">
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 xl:col-span-2">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
             <h2 className="text-lg font-bold text-slate-900">
               Vehicle Information
             </h2>
@@ -969,7 +969,7 @@ return (
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">
               Pricing Snapshot
             </h2>
@@ -993,7 +993,7 @@ return (
           </div>
         </div>
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold text-slate-900">Vehicle Notes</h2>
 
           {vehicle.notes ? (
@@ -1007,7 +1007,7 @@ return (
           )}
         </div>
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-slate-900">

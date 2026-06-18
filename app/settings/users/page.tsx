@@ -88,7 +88,7 @@ const [inviteRole, setInviteRole] = useState("Sales");
   if (!canAccessRole(profile?.role, "userManagement")) {
     return (
       <DashboardLayout>
-        <div className="rounded-xl bg-white p-10 shadow">
+        <div className="rounded-3xl border border-slate-200 bg-white p-10 shadow-sm">
           <h1 className="text-2xl font-bold text-slate-800">Access Denied</h1>
           <p className="mt-3 text-slate-500">
             You do not have permission to manage users.
@@ -151,11 +151,16 @@ async function handleInviteUser() {
         handled by Admin or Manager.
       </div>
 
-      <div className="mb-6 flex items-center justify-between">
-  <div>
-    <h1 className="text-3xl font-bold text-slate-800">
-      User Management
-    </h1>
+      <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-700">
+              Access control
+            </p>
+
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+              User Management
+            </h1>
     <p className="text-slate-500">
       Manage dealership users, roles and account status
     </p>
@@ -164,13 +169,14 @@ async function handleInviteUser() {
   <WriteAccessGuard>
 <button
     onClick={() => setShowInviteModal(true)}
-    className="rounded-lg bg-slate-900 px-5 py-3 text-white hover:bg-slate-700"
+    className="rounded-2xl bg-slate-900 px-5 py-3 text-white hover:bg-slate-700"
   >
     + Invite User
   </button></WriteAccessGuard>
-</div>
+        </div>
+      </div>
 
-      <div className="overflow-hidden rounded-xl bg-white shadow">
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         {loading ? (
           <div className="p-6 text-slate-500">Loading users...</div>
         ) : (
@@ -258,7 +264,7 @@ async function handleInviteUser() {
 
 {showInviteModal && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
+    <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm-2xl">
       <h2 className="text-2xl font-bold text-slate-800">
         Invite New User
       </h2>
@@ -277,7 +283,7 @@ async function handleInviteUser() {
             value={inviteName}
             onChange={(e) => setInviteName(e.target.value)}
             placeholder="e.g. Sarah Jacobs"
-            className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+            className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           />
         </div>
 
@@ -290,7 +296,7 @@ async function handleInviteUser() {
             value={inviteEmail}
             onChange={(e) => setInviteEmail(e.target.value)}
             placeholder="e.g. sarah@dealer.co.za"
-            className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+            className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           />
         </div>
 
@@ -301,7 +307,7 @@ async function handleInviteUser() {
           <select
             value={inviteRole}
             onChange={(e) => setInviteRole(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+            className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           >
             {roles.map((role) => (
               <option key={role} value={role}>
@@ -324,7 +330,7 @@ async function handleInviteUser() {
         <WriteAccessGuard>
 <button
           onClick={handleInviteUser}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-white hover:bg-slate-700"
+          className="rounded-2xl bg-slate-900 px-4 py-2 text-white hover:bg-slate-700"
         >
           Continue
         </button></WriteAccessGuard>

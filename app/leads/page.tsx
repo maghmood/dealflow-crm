@@ -309,29 +309,35 @@ export default function LeadsPage() {
       <PageAccessGuard module="leads">
         <ReadOnlyNotice />
 
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800">
-              Leads
-            </h1>
+        <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-700">
+                Lead control
+              </p>
 
-            <p className="text-slate-500">
-              Manage dealership leads and follow-ups
-            </p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                Leads
+              </h1>
+
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                Capture new enquiries, assign ownership and move customers through the sales workflow.
+              </p>
+            </div>
+
+            <WriteAccessGuard>
+              <button
+                type="button"
+                onClick={openAddLeadModal}
+                className="rounded-2xl brand-primary-bg px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:opacity-90"
+              >
+                + Add Lead
+              </button>
+            </WriteAccessGuard>
           </div>
-
-          <WriteAccessGuard>
-            <button
-              type="button"
-              onClick={openAddLeadModal}
-              className="rounded-lg brand-primary-bg px-5 py-3 text-white"
-            >
-              + Add Lead
-            </button>
-          </WriteAccessGuard>
         </div>
 
-        <div className="overflow-hidden rounded-xl bg-white shadow">
+        <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
           {loading ? (
             <div className="p-6 text-slate-500">
               Loading leads...
@@ -402,7 +408,7 @@ export default function LeadsPage() {
                       <td className="px-6 py-4">
                         <Link
                           href={`/leads/${lead.id}`}
-                          className="rounded-lg brand-primary-bg px-4 py-2 text-sm text-white"
+                          className="rounded-2xl brand-primary-bg px-4 py-2 text-sm text-white"
                         >
                           View
                         </Link>
@@ -428,7 +434,7 @@ export default function LeadsPage() {
 
         {showAddModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-6 shadow-2xl">
+            <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-sm-2xl">
               <h2 className="text-2xl font-bold text-slate-800">
                 Add New Lead
               </h2>
@@ -449,7 +455,7 @@ export default function LeadsPage() {
                     onChange={(event) =>
                       setCustomerName(event.target.value)
                     }
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
@@ -465,7 +471,7 @@ export default function LeadsPage() {
                       onChange={(event) =>
                         setPhone(event.target.value)
                       }
-                      className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                     />
                   </div>
 
@@ -480,7 +486,7 @@ export default function LeadsPage() {
                       onChange={(event) =>
                         setEmail(event.target.value)
                       }
-                      className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                     />
                   </div>
                 </div>
@@ -563,7 +569,7 @@ export default function LeadsPage() {
                         )
                       }
                       placeholder="Example: 2023 Toyota Fortuner"
-                      className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                     />
                   </div>
                 )}
@@ -620,7 +626,7 @@ export default function LeadsPage() {
                       setBudget(event.target.value)
                     }
                     placeholder="Example: R8,500 per month"
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
               </div>
@@ -639,7 +645,7 @@ export default function LeadsPage() {
                   type="button"
                   onClick={() => void saveLead()}
                   disabled={savingLead}
-                  className="rounded-lg brand-primary-bg px-4 py-2 text-white disabled:opacity-50"
+                  className="rounded-2xl brand-primary-bg px-4 py-2 text-white disabled:opacity-50"
                 >
                   {savingLead ? "Saving..." : "Save Lead"}
                 </button>

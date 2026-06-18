@@ -136,26 +136,35 @@ export default function CustomersPage() {
   <DashboardLayout>
     <PageAccessGuard module="customers">
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800">Customers</h1>
-            <p className="text-slate-500">
-              Customer directory generated from dealership leads
-            </p>
-          </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-700">
+                Customer directory
+              </p>
 
-          <div className="flex gap-3">
-            <button className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
-              Import
-            </button>
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                Customers
+              </h1>
 
-            <Link
-              href="/leads"
-              className="rounded-xl px-5 py-3 text-center text-sm font-semibold text-white shadow-sm transition"
-              style={{ backgroundColor: "var(--brand-primary)" }}
-            >
-              + Add Customer via Lead
-            </Link>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                Search customer records, open Customer 360 and continue from the linked lead journey.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50">
+                Import
+              </button>
+
+              <Link
+                href="/leads"
+                className="rounded-2xl px-5 py-3 text-center text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5"
+                style={{ backgroundColor: "var(--brand-primary)" }}
+              >
+                + Add Customer via Lead
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -281,13 +290,13 @@ export default function CustomersPage() {
               placeholder="Search customer, phone, email, vehicle or salesperson..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm lg:col-span-2"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 lg:col-span-2"
             />
 
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option value="All">All Statuses</option>
               {statuses.map((status) => (
@@ -297,7 +306,7 @@ export default function CustomersPage() {
               ))}
             </select>
 
-            <button className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <button className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 font-semibold text-slate-700 hover:bg-slate-50">
               Filters
             </button>
           </div>
@@ -409,7 +418,7 @@ export default function CustomersPage() {
 
                           <Link
                             href={`/leads/${item.id}`}
-                            className="whitespace-nowrap rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+                            className="whitespace-nowrap rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
                           >
                             Open Lead
                           </Link>
