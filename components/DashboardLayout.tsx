@@ -626,9 +626,7 @@ if (!profile || profile.status !== "Active") {
       : "bg-blue-100 text-blue-600"
   }`}
 >
-  {notification.source === "whatsapp"
-    ? "💬"
-    : notification.source === "communication"
+  {notification.source === "communication"
     ? "📣"
     : notification.severity === "red"
     ? "⚠️"
