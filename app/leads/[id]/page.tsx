@@ -3056,12 +3056,6 @@ async function fetchAffordabilityAssessments() {
 
     setSavingCommunication(true);
 
-    let externalWindow: Window | null = null;
-
-    if (communicationChannel === "WhatsApp" || communicationChannel === "Email") {
-      externalWindow = window.open("about:blank", "_blank");
-    }
-
     try {
       const { data, error } = await supabase
         .from("communication_logs")
@@ -3092,7 +3086,6 @@ async function fetchAffordabilityAssessments() {
         .single();
 
       if (error || !data) {
-        externalWindow?.close();
         alert(
           "Could not create the communication action: " +
             (error?.message || "Unknown error")
@@ -3114,15 +3107,19 @@ async function fetchAffordabilityAssessments() {
       );
 
       if (communicationChannel === "WhatsApp") {
-        const url = `https://wa.me/${customerPhone}?text=${encodeURIComponent(
+        /*
+         * Use the WhatsApp app protocol first so desktop/mobile users with the
+         * WhatsApp app installed are not also forced through a browser tab.
+         *
+         * Browsers cannot reliably detect whether the WhatsApp desktop/mobile app
+         * is installed, so we do not auto-open a web fallback here. The outcome
+         * modal provides a manual WhatsApp Web fallback link if the app does not open.
+         */
+        const appUrl = `whatsapp://send?phone=${customerPhone}&text=${encodeURIComponent(
           communicationMessage.trim()
         )}`;
 
-        if (externalWindow) {
-          externalWindow.location.href = url;
-        } else {
-          window.location.href = url;
-        }
+        window.location.href = appUrl;
       } else {
         const mailto = `mailto:${encodeURIComponent(
           customerEmail
@@ -3130,11 +3127,12 @@ async function fetchAffordabilityAssessments() {
           communicationSubject.trim() || "DealFlow message"
         )}&body=${encodeURIComponent(communicationMessage.trim())}`;
 
-        if (externalWindow) {
-          externalWindow.location.href = mailto;
-        } else {
-          window.location.href = mailto;
-        }
+        /*
+         * mailto should open the user's default mail app in the current browser
+         * context. Do not open about:blank first because it creates an unnecessary
+         * blank tab when Outlook/Gmail desktop handling is available.
+         */
+        window.location.href = mailto;
       }
 
       await addActivity(
@@ -3206,9 +3204,19 @@ async function fetchAffordabilityAssessments() {
             p_priority: "Medium",
             p_due_date: new Date(communicationFollowUpDate).toISOString(),
             p_task_scope: "Sales",
-            p_task_reason: "CUSTOMER_FOLLOW_UP",
-            p_related_record_type: "communication_log",
-            p_related_record_id: activeCommunicationLog.id,
+            p_task_reason:
+              activeCommunicationLog.channel === "WhatsApp"
+                ? "WHATSAPP_FOLLOW_UP"
+                : activeCommunicationLog.channel === "Email"
+                ? "EMAIL_FOLLOW_UP"
+                : "COMMUNICATION_FOLLOW_UP",
+            /*
+             * Dedupe communication follow-up tasks at Lead + Channel level.
+             * A new WhatsApp or Email communication outcome should update/reopen
+             * the existing matching follow-up task instead of creating duplicates.
+             */
+            p_related_record_type: "lead",
+            p_related_record_id: lead.id,
             p_use_dedupe: true,
           }
         );
@@ -5993,6 +6001,40 @@ async function fetchAffordabilityAssessments() {
                 ✕
               </button>
             </div>
+
+            {activeCommunicationLog?.channel === "WhatsApp" && (
+              <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                <p className="font-semibold">WhatsApp app opened?</p>
+                <p className="mt-1">
+                  DealFlow tried to open the WhatsApp desktop/mobile app directly. If the app did not open,
+                  use the fallback below.
+                </p>
+                <a
+                  href={`https://web.whatsapp.com/send?phone=${normalizePhone(activeCommunicationLog.customer_phone || lead.phone)}&text=${encodeURIComponent(activeCommunicationLog.message_body || "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800"
+                >
+                  Open WhatsApp Web fallback
+                </a>
+              </div>
+            )}
+
+            {activeCommunicationLog?.channel === "Email" && (
+              <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                <p className="font-semibold">Email app opened?</p>
+                <p className="mt-1">
+                  DealFlow tried to open your default email app directly. If it did not open,
+                  use the fallback below.
+                </p>
+                <a
+                  href={`mailto:${encodeURIComponent(activeCommunicationLog.customer_email || lead.email || "")}?subject=${encodeURIComponent(activeCommunicationLog.subject || "DealFlow message")}&body=${encodeURIComponent(activeCommunicationLog.message_body || "")}`}
+                  className="mt-3 inline-flex rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800"
+                >
+                  Open Email fallback
+                </a>
+              </div>
+            )}
 
             {!activeCommunicationLog && (
               <div className="mt-5">
