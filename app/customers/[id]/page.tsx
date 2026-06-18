@@ -324,7 +324,7 @@ function communicationStatusBadge(status: string | null) {
 }
 
 function communicationChannelIcon(channel: string | null) {
-  if (channel === "WhatsApp") return "💬";
+  if (channel === "Message") return "📝";
   if (channel === "Email") return "✉️";
   if (channel === "Call") return "📞";
   return "📝";
@@ -332,7 +332,7 @@ function communicationChannelIcon(channel: string | null) {
 
 function buildCommunicationTemplate(args: {
   templateKey: string;
-  channel: "WhatsApp" | "Email";
+  channel: "Message" | "Email";
   customerName: string | null;
   vehicleName: string | null;
   salespersonName: string;
@@ -439,7 +439,7 @@ const [editVehicle, setEditVehicle] =
 const [communicationLogs, setCommunicationLogs] = useState<CommunicationLog[]>([]);
 const [showCommunicationModal, setShowCommunicationModal] = useState(false);
 const [communicationChannel, setCommunicationChannel] =
-  useState<"WhatsApp" | "Email">("WhatsApp");
+  useState<"Message" | "Email">("Email");
 const [communicationTemplateKey, setCommunicationTemplateKey] =
   useState("follow_up");
 const [communicationSubject, setCommunicationSubject] = useState("");
@@ -621,7 +621,7 @@ const [communicationFollowUpDate, setCommunicationFollowUpDate] = useState("");
     }
 
     /*
-     * Keep the existing WhatsApp conversation matched
+     * Keep the existing Message conversation matched
      * to the updated customer details.
      */
     const { error: conversationError } =
@@ -640,7 +640,7 @@ const [communicationFollowUpDate, setCommunicationFollowUpDate] = useState("");
 
     if (conversationError) {
       console.error(
-        "Customer updated, but WhatsApp conversation could not be refreshed:",
+        "Customer updated, but Message conversation could not be refreshed:",
         conversationError.message
       );
     }
@@ -987,7 +987,7 @@ const [communicationFollowUpDate, setCommunicationFollowUpDate] = useState("");
   }
 
   function openCommunicationModal(
-    channel: "WhatsApp" | "Email",
+    channel: "Message" | "Email",
     templateKey = "follow_up"
   ) {
     if (!customer) return;
@@ -1042,7 +1042,7 @@ const [communicationFollowUpDate, setCommunicationFollowUpDate] = useState("");
     const customerPhone = normalizePhoneForMatching(customer.phone);
     const customerEmail = customer.email || "";
 
-    if (communicationChannel === "WhatsApp" && !customerPhone) {
+    if (communicationChannel === "Message" && !customerPhone) {
       alert("Customer phone number is missing.");
       return;
     }
@@ -1102,11 +1102,12 @@ const [communicationFollowUpDate, setCommunicationFollowUpDate] = useState("");
       setCommunicationFollowUpRequired(true);
       setCommunicationFollowUpDate(buildDateTimeLocalTomorrowMorning());
 
-      if (communicationChannel === "WhatsApp") {
-        window.location.href = `whatsapp://send?phone=${customerPhone}&text=${encodeURIComponent(
-          communicationMessage.trim()
-        )}`;
-      } else {
+      if (communicationChannel === "Message") {
+        alert("Messaging channel is disabled for MVP1. Use Email Assist or Call instead.");
+        return;
+      }
+
+      {
         window.location.href = `mailto:${encodeURIComponent(
           customerEmail
         )}?subject=${encodeURIComponent(
@@ -1187,7 +1188,7 @@ const [communicationFollowUpDate, setCommunicationFollowUpDate] = useState("");
             p_due_date: new Date(communicationFollowUpDate).toISOString(),
             p_task_scope: "Sales",
             p_task_reason:
-              activeCommunicationLog.channel === "WhatsApp"
+              activeCommunicationLog.channel === "Message"
                 ? "WHATSAPP_FOLLOW_UP"
                 : activeCommunicationLog.channel === "Email"
                 ? "EMAIL_FOLLOW_UP"
@@ -1279,7 +1280,7 @@ const [communicationFollowUpDate, setCommunicationFollowUpDate] = useState("");
   function openCommunicationFallback() {
     if (!activeCommunicationLog) return;
 
-    if (activeCommunicationLog.channel === "WhatsApp") {
+    if (activeCommunicationLog.channel === "Message") {
       const phone = normalizePhoneForMatching(activeCommunicationLog.customer_phone);
 
       if (!phone) return;
@@ -1304,7 +1305,7 @@ const [communicationFollowUpDate, setCommunicationFollowUpDate] = useState("");
 
   function openManualOutcomeModal() {
     setActiveCommunicationLog(null);
-    setCommunicationChannel("WhatsApp");
+    setCommunicationChannel("Email");
     setCommunicationTemplateKey("manual_outcome");
     setCommunicationSubject("");
     setCommunicationMessage("");
@@ -1591,19 +1592,12 @@ return (
                 Communication Assist
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Start WhatsApp or email actions from Customer 360 and track pending outcomes.
+                Start email actions from Customer 360 and track pending outcomes.
               </p>
             </div>
 
             <WriteAccessGuard>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openCommunicationModal("WhatsApp", "follow_up")}
-                  className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
-                >
-                  Send WhatsApp
-                </button>
 
                 <button
                   type="button"
@@ -2288,8 +2282,7 @@ return (
           />
 
           <p className="mt-1 text-xs text-slate-500">
-            Changing this also updates the linked WhatsApp
-            conversation.
+            Changing this updates the customer contact details used across DealFlow.
           </p>
         </div>
 
@@ -2353,9 +2346,6 @@ return (
             </option>
             <option value="Facebook">
               Facebook
-            </option>
-            <option value="WhatsApp">
-              WhatsApp
             </option>
             <option value="Referral">
               Referral
@@ -2433,7 +2423,7 @@ return (
           <select
             value={communicationChannel}
             onChange={(event) => {
-              const channel = event.target.value as "WhatsApp" | "Email";
+              const channel = event.target.value as "Message" | "Email";
               setCommunicationChannel(channel);
               const template = buildCommunicationTemplate({
                 templateKey: communicationTemplateKey,
@@ -2449,7 +2439,6 @@ return (
             }}
             className="mt-1 w-full rounded-xl border border-slate-300 p-3"
           >
-            <option value="WhatsApp">WhatsApp</option>
             <option value="Email">Email</option>
           </select>
         </div>
@@ -2540,10 +2529,9 @@ return (
           <label className="text-sm font-semibold text-slate-600">Channel</label>
           <select
             value={communicationChannel}
-            onChange={(event) => setCommunicationChannel(event.target.value as "WhatsApp" | "Email")}
+            onChange={(event) => setCommunicationChannel(event.target.value as "Message" | "Email")}
             className="mt-1 w-full rounded-xl border border-slate-300 p-3"
           >
-            <option value="WhatsApp">WhatsApp</option>
             <option value="Email">Email</option>
           </select>
         </div>

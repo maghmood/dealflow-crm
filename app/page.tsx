@@ -156,7 +156,6 @@ function isCommunicationFollowUpTask(task: Task) {
     reasonLike.some((reason) =>
       searchable.includes(reason.toLowerCase())
     ) ||
-    searchable.includes("whatsapp") ||
     searchable.includes("email") ||
     searchable.includes("communication")
   );
@@ -697,7 +696,7 @@ export default function Home() {
     [leads]
   );
 
-  const openWhatsAppFollowUps = communicationFollowUpTasks.filter((task) =>
+  const openMessageFollowUps = communicationFollowUpTasks.filter((task) =>
     `${task.title || ""} ${task.description || ""} ${task.task_type || ""}`
       .toLowerCase()
       .includes("whatsapp")
@@ -1176,8 +1175,8 @@ export default function Home() {
                 tone="green"
               />
               <CommunicationMetric
-                label="WhatsApp Follow-ups"
-                value={openWhatsAppFollowUps}
+                label="Message Follow-ups"
+                value={openMessageFollowUps}
                 tone="purple"
               />
               <CommunicationMetric

@@ -20,7 +20,7 @@ export type AppModule =
   | "tasks"
   | "calendar"
   | "customers"
-  | "whatsapp"
+  | "whatsapp" // disabled for MVP1; retained only so old routes/components keep compiling
   | "finance"
   | "documents"
   | "inventory"

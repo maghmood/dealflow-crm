@@ -333,7 +333,7 @@ function communicationStatusBadge(status: string | null) {
 }
 
 function communicationChannelIcon(channel: string | null) {
-  if (channel === "WhatsApp") return "💬";
+  if (channel === "Message") return "📝";
   if (channel === "Email") return "✉️";
   if (channel === "Call") return "📞";
   return "📝";
@@ -357,7 +357,7 @@ function normalizePhoneForCommunication(value: string | null | undefined) {
 
 function buildCommunicationTemplate(args: {
   templateKey: string;
-  channel: "WhatsApp" | "Email";
+  channel: "Message" | "Email";
   customerName: string | null;
   vehicleName: string | null;
   salespersonName: string;
@@ -423,7 +423,7 @@ const [leadContact, setLeadContact] = useState<DealLeadContact | null>(null);
 const [communicationLogs, setCommunicationLogs] = useState<CommunicationLog[]>([]);
 const [showCommunicationModal, setShowCommunicationModal] = useState(false);
 const [communicationChannel, setCommunicationChannel] =
-  useState<"WhatsApp" | "Email">("WhatsApp");
+  useState<"Message" | "Email">("Email");
 const [communicationTemplateKey, setCommunicationTemplateKey] =
   useState("follow_up");
 const [communicationSubject, setCommunicationSubject] = useState("");
@@ -727,7 +727,7 @@ async function fetchDealDocuments() {
   }
 
   function openCommunicationModal(
-    channel: "WhatsApp" | "Email",
+    channel: "Message" | "Email",
     templateKey = "follow_up"
   ) {
     if (!deal) return;
@@ -784,7 +784,7 @@ async function fetchDealDocuments() {
     const customerPhone = normalizePhoneForCommunication(leadContact?.phone);
     const customerEmail = leadContact?.email || "";
 
-    if (communicationChannel === "WhatsApp" && !customerPhone) {
+    if (communicationChannel === "Message" && !customerPhone) {
       alert("Customer phone number is missing on the linked Lead.");
       return;
     }
@@ -844,11 +844,12 @@ async function fetchDealDocuments() {
       setCommunicationFollowUpRequired(true);
       setCommunicationFollowUpDate(buildDateTimeLocalTomorrowMorning());
 
-      if (communicationChannel === "WhatsApp") {
-        window.location.href = `whatsapp://send?phone=${customerPhone}&text=${encodeURIComponent(
-          communicationMessage.trim()
-        )}`;
-      } else {
+      if (communicationChannel === "Message") {
+        alert("Messaging channel is disabled for MVP1. Use Email Assist or Call instead.");
+        return;
+      }
+
+      {
         window.location.href = `mailto:${encodeURIComponent(
           customerEmail
         )}?subject=${encodeURIComponent(
@@ -932,7 +933,7 @@ async function fetchDealDocuments() {
             p_due_date: new Date(communicationFollowUpDate).toISOString(),
             p_task_scope: "Sales",
             p_task_reason:
-              activeCommunicationLog.channel === "WhatsApp"
+              activeCommunicationLog.channel === "Message"
                 ? "WHATSAPP_FOLLOW_UP"
                 : activeCommunicationLog.channel === "Email"
                 ? "EMAIL_FOLLOW_UP"
@@ -1028,7 +1029,7 @@ async function fetchDealDocuments() {
   function openCommunicationFallback() {
     if (!activeCommunicationLog) return;
 
-    if (activeCommunicationLog.channel === "WhatsApp") {
+    if (activeCommunicationLog.channel === "Message") {
       const phone = normalizePhoneForCommunication(activeCommunicationLog.customer_phone);
 
       if (!phone) return;
@@ -1053,7 +1054,7 @@ async function fetchDealDocuments() {
 
   function openManualOutcomeModal() {
     setActiveCommunicationLog(null);
-    setCommunicationChannel("WhatsApp");
+    setCommunicationChannel("Email");
     setCommunicationTemplateKey("manual_outcome");
     setCommunicationSubject("");
     setCommunicationMessage("");
@@ -1593,19 +1594,11 @@ return (
                 Deal Communication Assist
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Send deal-stage WhatsApp or email messages and track pending outcomes.
+                Send deal-stage email messages and track pending outcomes.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => openCommunicationModal("WhatsApp", "follow_up")}
-                disabled={!deal.lead_id}
-                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Send WhatsApp
-              </button>
 
               <button
                 type="button"
@@ -2438,7 +2431,7 @@ return (
           <select
             value={communicationChannel}
             onChange={(event) => {
-              const channel = event.target.value as "WhatsApp" | "Email";
+              const channel = event.target.value as "Message" | "Email";
               setCommunicationChannel(channel);
               const template = buildCommunicationTemplate({
                 templateKey: communicationTemplateKey,
@@ -2455,7 +2448,6 @@ return (
             }}
             className="mt-1 w-full rounded-xl border border-slate-300 p-3"
           >
-            <option value="WhatsApp">WhatsApp</option>
             <option value="Email">Email</option>
           </select>
         </div>
@@ -2546,10 +2538,9 @@ return (
           <label className="text-sm font-semibold text-slate-600">Channel</label>
           <select
             value={communicationChannel}
-            onChange={(event) => setCommunicationChannel(event.target.value as "WhatsApp" | "Email")}
+            onChange={(event) => setCommunicationChannel(event.target.value as "Message" | "Email")}
             className="mt-1 w-full rounded-xl border border-slate-300 p-3"
           >
-            <option value="WhatsApp">WhatsApp</option>
             <option value="Email">Email</option>
           </select>
         </div>
