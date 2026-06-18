@@ -609,7 +609,7 @@ if (!profile || profile.status !== "Active") {
 
       <div className="flex min-h-screen">
         <aside
-          className="hidden w-72 flex-col text-white shadow-2xl lg:flex"
+          className="sticky top-0 hidden h-screen w-72 flex-shrink-0 flex-col text-white shadow-2xl lg:flex"
           style={{ backgroundColor: sidebarColor }}
         >
           <div className="border-b border-white/10 p-5">
