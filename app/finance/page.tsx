@@ -152,33 +152,38 @@ const filteredApplications = applications
   return (
   <DashboardLayout>
     <PageAccessGuard module="finance">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">
+          <p className="text-sm font-bold uppercase tracking-[0.18em] text-orange-700">
+            Finance workflow
+          </p>
+
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
             Finance Queue
           </h1>
-          <p className="text-slate-500">
-            Manage dealership finance applications and approvals
+
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            Review applications, monitor approvals and keep the sales team updated on finance progress.
           </p>
         </div>
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-xl bg-white p-6 shadow">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-500">Total Applications</p>
           <h2 className="mt-2 text-3xl font-bold text-slate-800">
             {applications.length}
           </h2>
         </div>
 
-        <div className="rounded-xl bg-white p-6 shadow">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-500">Approved</p>
           <h2 className="mt-2 text-3xl font-bold text-green-700">
             {applications.filter((a) => a.finance_status === "Approved").length}
           </h2>
         </div>
 
-        <div className="rounded-xl bg-white p-6 shadow">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-500">Pending Review</p>
           <h2 className="mt-2 text-3xl font-bold text-orange-700">
             {
@@ -190,20 +195,20 @@ const filteredApplications = applications
         </div>
       </div>
 
-<div className="mb-6 rounded-xl bg-white p-5 shadow">
+<div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
     <input
       type="text"
       placeholder="Search customer, vehicle or bank..."
       value={searchTerm}
       onChange={(e) => setSearchTerm(e.target.value)}
-      className="rounded-lg border border-slate-300 p-3"
+      className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
     />
 
     <select
       value={statusFilter}
       onChange={(e) => setStatusFilter(e.target.value)}
-      className="rounded-lg border border-slate-300 p-3"
+      className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
     >
       <option value="All">All Statuses</option>
       <option value="Submitted">Submitted</option>
@@ -214,7 +219,7 @@ const filteredApplications = applications
     <select
       value={sortOrder}
       onChange={(e) => setSortOrder(e.target.value)}
-      className="rounded-lg border border-slate-300 p-3"
+      className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
     >
       <option value="Newest">Newest First</option>
       <option value="Oldest">Oldest First</option>
@@ -223,7 +228,7 @@ const filteredApplications = applications
 </div>
 
 
-      <div className="overflow-hidden rounded-xl bg-white shadow">
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         {loading ? (
           <div className="p-6 text-slate-500">
             Loading finance applications...
@@ -285,7 +290,7 @@ const filteredApplications = applications
                   <td className="px-6 py-4">
                     <Link
   href={`/finance/${app.id}`}
-  className="rounded-lg brand-primary-bg px-4 py-2 text-sm text-white"
+  className="rounded-2xl brand-primary-bg px-4 py-2 text-sm text-white"
 >
   View
 </Link>
@@ -309,7 +314,7 @@ const filteredApplications = applications
 
       {selectedApp && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm-2xl">
             <h2 className="text-2xl font-bold text-slate-800">
               Review Finance Application
             </h2>
@@ -324,14 +329,14 @@ const filteredApplications = applications
                 placeholder="Bank / Finance Provider"
                 value={bank}
                 onChange={(e) => setBank(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 p-3"
+                className="w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
 
               <textarea
                 placeholder="Finance notes"
                 value={financeNotes}
                 onChange={(e) => setFinanceNotes(e.target.value)}
-                className="min-h-32 w-full rounded-lg border border-slate-300 p-3"
+                className="min-h-32 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
             </div>
 

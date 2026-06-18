@@ -641,28 +641,36 @@ export default function DealsPage() {
     <PageAccessGuard module="deals">
       <ReadOnlyNotice />
       <div className="space-y-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-slate-900">Deals</h1>
-              <span className="rounded-full bg-slate-200 px-3 py-1 text-sm font-bold text-slate-700">
-                {totalDeals}
-              </span>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-700">
+                Sales workflow
+              </p>
+
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-black tracking-tight text-slate-950">
+                  Deals
+                </h1>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">
+                  {totalDeals} total
+                </span>
+              </div>
+
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                Track each customer transaction from draft offer through finance approval, delivery readiness and handover.
+              </p>
             </div>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Manage customer deals, finance progress and delivery status.
-            </p>
+            <WriteAccessGuard>
+              <button
+                onClick={openCreateModal}
+                className="rounded-2xl brand-primary-bg px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:opacity-90"
+              >
+                + Create Deal
+              </button>
+            </WriteAccessGuard>
           </div>
-
-          <WriteAccessGuard>
-            <button
-              onClick={openCreateModal}
-              className="rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-            >
-              + Create Deal
-            </button>
-          </WriteAccessGuard>
         </div>
 
         <div
@@ -683,13 +691,13 @@ export default function DealsPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search customer, vehicle, stage or finance status..."
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             />
 
             <select
               value={stageFilter}
               onChange={(e) => setStageFilter(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option>All Stages</option>
               {DEAL_STAGES.map((stage) => (
@@ -700,7 +708,7 @@ export default function DealsPage() {
             <select
               value={financeFilter}
               onChange={(e) => setFinanceFilter(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option>All Finance</option>
               {FINANCE_STATUSES.map((status) => (
@@ -711,7 +719,7 @@ export default function DealsPage() {
         </div>
 
         {loading ? (
-          <div className="rounded-2xl bg-white p-8 text-slate-500 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-slate-500 shadow-sm">
             Loading deals...
           </div>
         ) : filteredDeals.length === 0 ? (
@@ -725,7 +733,7 @@ export default function DealsPage() {
             <WriteAccessGuard>
               <button
                 onClick={openCreateModal}
-                className="mt-5 rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
+                className="mt-5 rounded-2xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
               >
                 + Create Deal
               </button>
@@ -867,7 +875,7 @@ export default function DealsPage() {
                 <select
                   value={form.lead_id}
                   onChange={(e) => handleLeadChange(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 >
                   <option value="">No lead selected</option>
                   {leads.map((lead) => (
@@ -888,7 +896,7 @@ export default function DealsPage() {
                   onChange={(e) =>
                     setForm({ ...form, deal_stage: e.target.value })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 >
                   {DEAL_STAGES.map((stage) => (
                     <option key={stage}>{stage}</option>
@@ -903,7 +911,7 @@ export default function DealsPage() {
                 <select
                   value={form.vehicle_id}
                   onChange={(e) => handleVehicleChange(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 >
                   <option value="">No vehicle selected</option>
                   {vehicles.map((vehicle) => (
@@ -925,7 +933,7 @@ export default function DealsPage() {
                   onChange={(e) =>
                     setForm({ ...form, finance_status: e.target.value })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 >
                   {FINANCE_STATUSES.map((status) => (
                     <option key={status}>{status}</option>
@@ -943,7 +951,7 @@ export default function DealsPage() {
                   onChange={(e) =>
                     setForm({ ...form, customer_name: e.target.value })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 />
               </div>
 
@@ -957,7 +965,7 @@ export default function DealsPage() {
                   onChange={(e) =>
                     setForm({ ...form, vehicle_name: e.target.value })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 />
               </div>
 
@@ -971,7 +979,7 @@ export default function DealsPage() {
                   onChange={(e) =>
                     setForm({ ...form, sale_price: e.target.value })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 />
               </div>
 
@@ -985,7 +993,7 @@ export default function DealsPage() {
                   onChange={(e) =>
                     setForm({ ...form, deposit_amount: e.target.value })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 />
               </div>
 
@@ -999,7 +1007,7 @@ export default function DealsPage() {
                   onChange={(e) =>
                     setForm({ ...form, trade_in_value: e.target.value })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 />
               </div>
 
@@ -1013,7 +1021,7 @@ export default function DealsPage() {
                   onChange={(e) =>
                     setForm({ ...form, settlement_amount: e.target.value })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 />
               </div>
 
@@ -1027,7 +1035,7 @@ export default function DealsPage() {
                   onChange={(e) =>
                     setForm({ ...form, extras_amount: e.target.value })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 />
               </div>
 
@@ -1041,7 +1049,7 @@ export default function DealsPage() {
                   onChange={(e) =>
                     setForm({ ...form, discount_amount: e.target.value })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 />
               </div>
 
@@ -1055,7 +1063,7 @@ export default function DealsPage() {
                     setForm({ ...form, notes: e.target.value })
                   }
                   placeholder="Finance notes, delivery notes, discount motivation, trade-in notes..."
-                  className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 p-3 text-sm"
+                  className="mt-1 min-h-24 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 />
               </div>
             </div>
@@ -1071,7 +1079,7 @@ export default function DealsPage() {
               <button
                 onClick={saveDeal}
                 disabled={saving}
-                className="rounded-xl bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+                className="rounded-2xl bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-60"
               >
                 {saving ? "Saving..." : "Save Deal"}
               </button>

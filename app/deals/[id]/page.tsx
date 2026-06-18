@@ -1480,7 +1480,7 @@ async function uploadDealDocument(file: File) {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="rounded-2xl bg-white p-8 text-slate-500 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-3xl border border-slate-200 bg-white p-8 text-slate-500 shadow-sm">
           Loading deal details...
         </div>
       </DashboardLayout>
@@ -1499,7 +1499,7 @@ async function uploadDealDocument(file: File) {
           </p>
           <button
             onClick={() => router.push("/deals")}
-            className="mt-5 rounded-xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
+            className="mt-5 rounded-2xl brand-primary-bg px-5 py-3 text-sm font-semibold text-white"
           >
             Back to Deals
           </button>
@@ -1512,61 +1512,63 @@ return (
   <DashboardLayout>
     <PageAccessGuard module="deals">
       <div className="space-y-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <Link
-              href="/deals"
-              className="text-sm font-semibold text-blue-700 hover:underline"
-            >
-              ← Back to Deals
-            </Link>
-
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-bold text-slate-900">
-                Deal #{deal.id}
-              </h1>
-
-              <span
-                className={`${stageBadge(
-                  deal.deal_stage
-                )} rounded-full px-3 py-1 text-xs font-extrabold`}
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <Link
+                href="/deals"
+                className="text-sm font-bold text-blue-700 hover:underline"
               >
-                {deal.deal_stage || "Draft"}
-              </span>
+                ← Back to Deals
+              </Link>
 
-              <span
-                className={`${financeBadge(
-                  deal.finance_status
-                )} rounded-full px-3 py-1 text-xs font-extrabold`}
-              >
-                {deal.finance_status || "Not Started"}
-              </span>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-black tracking-tight text-slate-950">
+                  Deal #{deal.id}
+                </h1>
+
+                <span
+                  className={`${stageBadge(
+                    deal.deal_stage
+                  )} rounded-full px-3 py-1 text-xs font-extrabold`}
+                >
+                  {deal.deal_stage || "Draft"}
+                </span>
+
+                <span
+                  className={`${financeBadge(
+                    deal.finance_status
+                  )} rounded-full px-3 py-1 text-xs font-extrabold`}
+                >
+                  {deal.finance_status || "Not Started"}
+                </span>
+              </div>
+
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                {deal.customer_name || "Unknown customer"} •{" "}
+                {deal.vehicle_name || "No vehicle captured"}
+              </p>
             </div>
 
-            <p className="mt-1 text-sm text-slate-500">
-              {deal.customer_name || "Unknown customer"} •{" "}
-              {deal.vehicle_name || "No vehicle captured"}
-            </p>
-          </div>
+            <div className="flex flex-wrap gap-3">
+              {deal.lead_id && (
+                <Link
+                  href={`/leads/${deal.lead_id}`}
+                  className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500"
+                >
+                  Open Lead
+                </Link>
+              )}
 
-          <div className="flex flex-wrap gap-3">
-            {deal.lead_id && (
-              <Link
-                href={`/leads/${deal.lead_id}`}
-                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
-              >
-                Open Lead
-              </Link>
-            )}
-
-            {deal.vehicle_id && (
-              <Link
-                href={`/inventory/${deal.vehicle_id}`}
-                className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700"
-              >
-                Open Vehicle
-              </Link>
-            )}
+              {deal.vehicle_id && (
+                <Link
+                  href={`/inventory/${deal.vehicle_id}`}
+                  className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white hover:bg-slate-700"
+                >
+                  Open Vehicle
+                </Link>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1586,7 +1588,7 @@ return (
 
 
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h2 className="text-lg font-bold text-slate-900">
@@ -1602,7 +1604,7 @@ return (
                 type="button"
                 onClick={() => openCommunicationModal("WhatsApp", "follow_up")}
                 disabled={!deal.lead_id}
-                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-2xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Send WhatsApp
               </button>
@@ -1611,7 +1613,7 @@ return (
                 type="button"
                 onClick={() => openCommunicationModal("Email", "follow_up")}
                 disabled={!deal.lead_id}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Send Email
               </button>
@@ -1694,7 +1696,7 @@ return (
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">
               Sale and Delivery Workflow
             </h2>
@@ -1724,7 +1726,7 @@ return (
                     deal.finance_status === "Approved" ||
                     Boolean(deal.selected_bank_offer_id)
                   }
-                  className="rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-2xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {submittingToFinance
                     ? "Submitting..."
@@ -1752,7 +1754,7 @@ return (
                   deal.deal_stage === "Delivered" ||
                   deal.deal_stage === "Lost"
                 }
-                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Start Vehicle Preparation
               </button>
@@ -1844,7 +1846,7 @@ return (
                   workflowSaving ||
                   deal.deal_stage !== "Ready for Delivery"
                 }
-                className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-2xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Complete Customer Handover
               </button>
@@ -1860,7 +1862,7 @@ return (
                 onChange={(event) =>
                   setNotesDraft(event.target.value)
                 }
-                className="mt-1 min-h-28 w-full rounded-xl border border-slate-300 p-3 text-sm"
+                className="mt-1 min-h-28 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-sm"
                 placeholder="Preparation notes, customer instructions or delivery comments..."
               />
 
@@ -1868,14 +1870,14 @@ return (
                 type="button"
                 onClick={saveDealUpdates}
                 disabled={saving}
-                className="mt-3 w-full rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+                className="mt-3 w-full rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
               >
                 {saving ? "Saving..." : "Save Notes"}
               </button>
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">Deal Summary</h2>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -1997,7 +1999,7 @@ return (
         )}
 
         <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
@@ -2096,7 +2098,7 @@ return (
           </div>
 
           <div className="space-y-5">
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-900">
                 Checklist Status
               </h2>
@@ -2151,7 +2153,7 @@ return (
               )}
             </div>
 
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-900">
                 Finance Snapshot
               </h2>
@@ -2194,7 +2196,7 @@ return (
           </div>
         </div>
 
-<div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+<div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
     <div>
       <h2 className="text-lg font-bold text-slate-900">Deal Documents</h2>
@@ -2212,14 +2214,14 @@ return (
     <select
       value={documentType}
       onChange={(e) => setDocumentType(e.target.value)}
-      className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+      className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
     >
       {DEAL_DOCUMENT_TYPES.map((type) => (
         <option key={type}>{type}</option>
       ))}
     </select>
 
-    <label className="block cursor-pointer rounded-xl brand-primary-bg px-4 py-3 text-center text-sm font-semibold text-white hover:opacity-90">
+    <label className="block cursor-pointer rounded-2xl brand-primary-bg px-4 py-3 text-center text-sm font-semibold text-white hover:opacity-90">
       {uploadingDocument ? "Uploading Document..." : "Upload Deal Document"}
 
       <input
@@ -2297,7 +2299,7 @@ return (
               <a
                 href={doc.file_url || "#"}
                 download
-                className="rounded-xl bg-green-600 px-3 py-2 text-center text-sm font-semibold text-white hover:bg-green-500"
+                className="rounded-2xl bg-green-600 px-3 py-2 text-center text-sm font-semibold text-white hover:bg-green-500"
               >
                 Download
               </a>
@@ -2309,7 +2311,7 @@ return (
   </div>
 </div>
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold text-slate-900">
             Price Breakdown
           </h2>
@@ -2339,7 +2341,7 @@ return (
           </div>
         </div>
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-slate-900">
@@ -2453,7 +2455,7 @@ return (
               setCommunicationSubject(template.subject);
               setCommunicationMessage(template.body);
             }}
-            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+            className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           >
             <option value="WhatsApp">WhatsApp</option>
             <option value="Email">Email</option>
@@ -2465,7 +2467,7 @@ return (
           <select
             value={communicationTemplateKey}
             onChange={(event) => handleCommunicationTemplateChange(event.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+            className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           >
             {COMMUNICATION_TEMPLATES.map((template) => (
               <option key={template.key} value={template.key}>
@@ -2482,7 +2484,7 @@ return (
           <input
             value={communicationSubject}
             onChange={(event) => setCommunicationSubject(event.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+            className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           />
         </div>
       )}
@@ -2492,7 +2494,7 @@ return (
         <textarea
           value={communicationMessage}
           onChange={(event) => setCommunicationMessage(event.target.value)}
-          className="mt-1 min-h-40 w-full rounded-xl border border-slate-300 p-3"
+          className="mt-1 min-h-40 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
         />
       </div>
 
@@ -2509,7 +2511,7 @@ return (
           type="button"
           onClick={() => void startCommunicationAction()}
           disabled={savingCommunication}
-          className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
+          className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
         >
           {savingCommunication ? "Opening..." : `Open ${communicationChannel}`}
         </button>
@@ -2547,7 +2549,7 @@ return (
           <select
             value={communicationChannel}
             onChange={(event) => setCommunicationChannel(event.target.value as "WhatsApp" | "Email" | "Call")}
-            className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+            className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           >
             <option value="WhatsApp">WhatsApp</option>
             <option value="Email">Email</option>
@@ -2561,7 +2563,7 @@ return (
         <select
           value={communicationOutcome}
           onChange={(event) => setCommunicationOutcome(event.target.value)}
-          className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+          className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
         >
           {COMMUNICATION_OUTCOMES.map((outcome) => (
             <option key={outcome} value={outcome}>
@@ -2577,7 +2579,7 @@ return (
           value={communicationSummary}
           onChange={(event) => setCommunicationSummary(event.target.value)}
           placeholder="Example: Customer confirmed delivery date."
-          className="mt-1 min-h-28 w-full rounded-xl border border-slate-300 p-3"
+          className="mt-1 min-h-28 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
         />
       </div>
 
@@ -2623,7 +2625,7 @@ return (
               : void saveManualCommunicationOutcome()
           }
           disabled={savingCommunication}
-          className="rounded-xl bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+          className="rounded-2xl bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-500 disabled:opacity-50"
         >
           {savingCommunication ? "Saving..." : "Save Outcome"}
         </button>

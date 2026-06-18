@@ -766,33 +766,39 @@ if (!canAccessRole(profile?.role, "finance")) {
 return (
   <DashboardLayout>
     <PageAccessGuard module="finance">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <Link href="/finance" className="text-sm text-slate-500">
-            ← Back to Finance Queue
-          </Link>
+      <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <Link href="/finance" className="text-sm font-bold text-blue-700 hover:underline">
+              ← Back to Finance Queue
+            </Link>
 
-          <h1 className="mt-2 text-3xl font-bold text-slate-800">
-            Finance Application
-          </h1>
+            <p className="mt-4 text-sm font-bold uppercase tracking-[0.18em] text-orange-700">
+              Finance application
+            </p>
 
-          <p className="text-slate-500">
-            {application.customer} — {application.vehicle}
-          </p>
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+              {application.customer || "Customer"}
+            </h1>
+
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+              {application.vehicle || "Vehicle not captured"} • Application #{application.id}
+            </p>
+          </div>
+
+          <span
+            className={`rounded-full px-4 py-2 text-sm font-bold ${statusClass(
+              application.finance_status
+            )}`}
+          >
+            {application.finance_status || "Submitted"}
+          </span>
         </div>
-
-        <span
-          className={`rounded-full px-4 py-2 text-sm ${statusClass(
-            application.finance_status
-          )}`}
-        >
-          {application.finance_status || "Submitted"}
-        </span>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <div className="rounded-xl bg-white p-6 shadow">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold text-slate-800">
               Finance Application Summary
             </h2>
@@ -855,7 +861,7 @@ return (
             </div>
           </div>
 
-<div className="rounded-xl bg-white p-6 shadow">
+<div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
     <div>
       <h2 className="text-xl font-bold text-slate-800">
@@ -1184,7 +1190,7 @@ return (
   )}
 </div>
 
-<div className="rounded-xl bg-white p-6 shadow">
+<div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
   <h2 className="text-xl font-bold text-slate-800">
     Finance Notes History
   </h2>
@@ -1194,12 +1200,12 @@ return (
       placeholder="Add a new finance note..."
       value={newFinanceNote}
       onChange={(e) => setNewFinanceNote(e.target.value)}
-      className="min-h-28 w-full rounded-lg border border-slate-300 p-3"
+      className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
     />
 
     <button
       onClick={addFinanceNote}
-      className="rounded-lg brand-primary-bg px-4 py-2 text-white"
+      className="rounded-2xl brand-primary-bg px-4 py-2 text-white"
     >
       Add Note
     </button>
@@ -1226,7 +1232,7 @@ return (
   </div>
 </div>
 
-<div className="rounded-xl bg-white p-6 shadow">
+<div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
   <h2 className="text-xl font-bold text-slate-800">
     Finance Documents
   </h2>
@@ -1235,7 +1241,7 @@ return (
     <select
       value={documentType}
       onChange={(e) => setDocumentType(e.target.value)}
-      className="w-full rounded-lg border border-slate-300 p-3"
+      className="w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
     >
       <option>ID Document</option>
       <option>Payslip</option>
@@ -1255,7 +1261,7 @@ return (
             event.target.value === "" ? "" : Number(event.target.value)
           )
         }
-        className="w-full rounded-lg border border-slate-300 p-3"
+        className="w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
       >
         <option value="">Select approved bank offer...</option>
         {bankOffers
@@ -1275,12 +1281,12 @@ return (
           setSelectedFile(e.target.files[0]);
         }
       }}
-      className="w-full rounded-lg border border-slate-300 p-3"
+      className="w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
     />
 
     <button
       onClick={uploadDocument}
-      className="rounded-lg brand-primary-bg px-4 py-2 text-white"
+      className="rounded-2xl brand-primary-bg px-4 py-2 text-white"
     >
       Upload Document
     </button>
@@ -1325,7 +1331,7 @@ return (
 
       window.open(data.signedUrl, "_blank");
     }}
-    className="rounded-lg brand-primary-bg px-3 py-2 text-xs text-white"
+    className="rounded-2xl brand-primary-bg px-3 py-2 text-xs text-white"
   >
     Preview
   </button>
@@ -1356,7 +1362,7 @@ return (
   </div>
 </div>
 
-          <div className="rounded-xl bg-white p-6 shadow">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold text-slate-800">
               Lead Timeline
             </h2>
@@ -1386,7 +1392,7 @@ return (
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-xl bg-white p-6 shadow">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold text-slate-800">
               {editingBankOfferId
                 ? "Edit Bank Response"
@@ -1405,13 +1411,13 @@ return (
                 placeholder="Bank / Finance Provider"
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 p-3"
+                className="w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
 
               <select
                 value={bankOfferStatus}
                 onChange={(e) => setBankOfferStatus(e.target.value as FinanceBankOffer["status"])}
-                className="w-full rounded-lg border border-slate-300 p-3"
+                className="w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               >
                 <option>Submitted</option>
                 <option>Pending</option>
@@ -1420,21 +1426,21 @@ return (
               </select>
 
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                <input type="number" placeholder="Approved amount" value={approvedAmount} onChange={(e) => setApprovedAmount(e.target.value)} className="rounded-lg border border-slate-300 p-3" />
-                <input type="number" step="0.01" placeholder="Interest rate %" value={offerInterestRate} onChange={(e) => setOfferInterestRate(e.target.value)} className="rounded-lg border border-slate-300 p-3" />
-                <input type="number" placeholder="Deposit" value={offerDeposit} onChange={(e) => setOfferDeposit(e.target.value)} className="rounded-lg border border-slate-300 p-3" />
-                <input type="number" placeholder="Term months" value={offerTermMonths} onChange={(e) => setOfferTermMonths(e.target.value)} className="rounded-lg border border-slate-300 p-3" />
-                <input type="number" step="0.01" placeholder="Balloon %" value={offerBalloon} onChange={(e) => setOfferBalloon(e.target.value)} className="rounded-lg border border-slate-300 p-3" />
-                <input type="number" placeholder="Monthly instalment" value={offerMonthlyInstallment} onChange={(e) => setOfferMonthlyInstallment(e.target.value)} className="rounded-lg border border-slate-300 p-3" />
+                <input type="number" placeholder="Approved amount" value={approvedAmount} onChange={(e) => setApprovedAmount(e.target.value)} className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+                <input type="number" step="0.01" placeholder="Interest rate %" value={offerInterestRate} onChange={(e) => setOfferInterestRate(e.target.value)} className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+                <input type="number" placeholder="Deposit" value={offerDeposit} onChange={(e) => setOfferDeposit(e.target.value)} className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+                <input type="number" placeholder="Term months" value={offerTermMonths} onChange={(e) => setOfferTermMonths(e.target.value)} className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+                <input type="number" step="0.01" placeholder="Balloon %" value={offerBalloon} onChange={(e) => setOfferBalloon(e.target.value)} className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+                <input type="number" placeholder="Monthly instalment" value={offerMonthlyInstallment} onChange={(e) => setOfferMonthlyInstallment(e.target.value)} className="rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
               </div>
 
               <div>
                 <label className="text-sm font-medium text-slate-600">Approval Expiry Date</label>
-                <input type="date" value={offerExpiryDate} onChange={(e) => setOfferExpiryDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-3" />
+                <input type="date" value={offerExpiryDate} onChange={(e) => setOfferExpiryDate(e.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
               </div>
 
-              <textarea placeholder="Conditions" value={offerConditions} onChange={(e) => setOfferConditions(e.target.value)} className="min-h-24 w-full rounded-lg border border-slate-300 p-3" />
-              <textarea placeholder="Internal finance notes" value={offerNotes} onChange={(e) => setOfferNotes(e.target.value)} className="min-h-24 w-full rounded-lg border border-slate-300 p-3" />
+              <textarea placeholder="Conditions" value={offerConditions} onChange={(e) => setOfferConditions(e.target.value)} className="min-h-24 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+              <textarea placeholder="Internal finance notes" value={offerNotes} onChange={(e) => setOfferNotes(e.target.value)} className="min-h-24 w-full rounded-2xl border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
 
               <button
                 type="button"
@@ -1464,7 +1470,7 @@ return (
             </div>
           </div>
 
-          <div className="rounded-xl bg-white p-6 shadow">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold text-slate-800">Bank Responses</h2>
             <div className="mt-5 space-y-4">
               {bankOffers.length === 0 ? (
@@ -1917,7 +1923,7 @@ function ContextModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
+            className="rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
           >
             Close
           </button>
