@@ -332,7 +332,7 @@ function communicationChannelIcon(channel: string | null) {
 
 function buildCommunicationTemplate(args: {
   templateKey: string;
-  channel: "WhatsApp" | "Email";
+  channel: "WhatsApp" | "Email" | "Call";
   customerName: string | null;
   vehicleName: string | null;
   salespersonName: string;
@@ -439,7 +439,7 @@ const [editVehicle, setEditVehicle] =
 const [communicationLogs, setCommunicationLogs] = useState<CommunicationLog[]>([]);
 const [showCommunicationModal, setShowCommunicationModal] = useState(false);
 const [communicationChannel, setCommunicationChannel] =
-  useState<"WhatsApp" | "Email">("WhatsApp");
+  useState<"WhatsApp" | "Email" | "Call">("WhatsApp");
 const [communicationTemplateKey, setCommunicationTemplateKey] =
   useState("follow_up");
 const [communicationSubject, setCommunicationSubject] = useState("");
@@ -987,7 +987,7 @@ const [communicationFollowUpDate, setCommunicationFollowUpDate] = useState("");
   }
 
   function openCommunicationModal(
-    channel: "WhatsApp" | "Email",
+    channel: "WhatsApp" | "Email" | "Call",
     templateKey = "follow_up"
   ) {
     if (!customer) return;
@@ -2433,7 +2433,7 @@ return (
           <select
             value={communicationChannel}
             onChange={(event) => {
-              const channel = event.target.value as "WhatsApp" | "Email";
+              const channel = event.target.value as "WhatsApp" | "Email" | "Call";
               setCommunicationChannel(channel);
               const template = buildCommunicationTemplate({
                 templateKey: communicationTemplateKey,
@@ -2540,11 +2540,12 @@ return (
           <label className="text-sm font-semibold text-slate-600">Channel</label>
           <select
             value={communicationChannel}
-            onChange={(event) => setCommunicationChannel(event.target.value as "WhatsApp" | "Email")}
+            onChange={(event) => setCommunicationChannel(event.target.value as "WhatsApp" | "Email" | "Call")}
             className="mt-1 w-full rounded-xl border border-slate-300 p-3"
           >
             <option value="WhatsApp">WhatsApp</option>
             <option value="Email">Email</option>
+            <option value="Call">Call</option>
           </select>
         </div>
       )}

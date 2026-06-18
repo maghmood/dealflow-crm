@@ -429,7 +429,7 @@ function communicationStatusBadge(status: string | null) {
 
 function buildCommunicationTemplate(args: {
   templateKey: string;
-  channel: "WhatsApp" | "Email";
+  channel: "WhatsApp" | "Email" | "Call";
   lead: Lead;
   vehicleTitle: string;
   deal: LeadDealSnapshot | null;
@@ -564,7 +564,7 @@ const [savingCall, setSavingCall] = useState(false);
 const [communicationLogs, setCommunicationLogs] = useState<CommunicationLog[]>([]);
 const [showCommunicationModal, setShowCommunicationModal] = useState(false);
 const [communicationChannel, setCommunicationChannel] =
-  useState<"WhatsApp" | "Email">("WhatsApp");
+  useState<"WhatsApp" | "Email" | "Call">("WhatsApp");
 const [communicationTemplateKey, setCommunicationTemplateKey] =
   useState("follow_up");
 const [communicationSubject, setCommunicationSubject] = useState("");
@@ -2743,7 +2743,7 @@ async function fetchAffordabilityAssessments() {
   }
 
   function openCommunicationModal(
-    channel: "WhatsApp" | "Email",
+    channel: "WhatsApp" | "Email" | "Call",
     templateKey = "follow_up"
   ) {
     if (!lead) return;
@@ -5533,7 +5533,7 @@ async function fetchAffordabilityAssessments() {
                 <select
                   value={communicationChannel}
                   onChange={(event) => {
-                    const channel = event.target.value as "WhatsApp" | "Email";
+                    const channel = event.target.value as "WhatsApp" | "Email" | "Call";
                     setCommunicationChannel(channel);
 
                     if (lead) {
@@ -5719,13 +5719,14 @@ async function fetchAffordabilityAssessments() {
                   value={communicationChannel}
                   onChange={(event) =>
                     setCommunicationChannel(
-                      event.target.value as "WhatsApp" | "Email"
+                      event.target.value as "WhatsApp" | "Email" | "Call"
                     )
                   }
                   className="mt-1 w-full rounded-lg border border-slate-300 p-3"
                 >
                   <option>WhatsApp</option>
                   <option>Email</option>
+                  <option>Call</option>
                 </select>
               </div>
             )}
