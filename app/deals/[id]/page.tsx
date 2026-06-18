@@ -1075,38 +1075,29 @@ async function fetchDealDocuments() {
     setSavingCommunication(true);
 
     try {
-      const { error } = await supabase
-        .from("communication_logs")
-        .insert({
-          company_id: profile.company_id,
-          lead_id: deal.lead_id,
-          deal_id: deal.id,
-          finance_application_id: null,
-          channel: communicationChannel,
-          direction: "Inbound",
-          template_key: "manual_outcome",
-          subject:
+      const { data, error } = await supabase.rpc(
+        "resolve_manual_communication_outcome",
+        {
+          p_lead_id: deal.lead_id,
+          p_channel: communicationChannel,
+          p_outcome: communicationOutcome,
+          p_summary: communicationSummary.trim() || null,
+          p_subject:
             communicationChannel === "Email"
               ? communicationSubject.trim() || null
               : null,
-          message_body: communicationMessage.trim() || null,
-          outcome: communicationOutcome,
-          summary: communicationSummary.trim() || null,
-          send_status: "Closed",
-          customer_name: deal.customer_name || leadContact?.customer,
-          customer_phone: leadContact?.phone,
-          customer_email: leadContact?.email,
-          created_by_id: profile.id,
-          created_by_name:
-            profile.full_name || profile.email || "Unknown User",
-          sent_at: new Date().toISOString(),
-          resolved_at: new Date().toISOString(),
-        });
+          p_message_body: communicationMessage.trim() || null,
+          p_deal_id: deal.id,
+          p_finance_application_id: null,
+        }
+      );
 
       if (error) {
         alert("Could not save communication outcome: " + error.message);
         return;
       }
+
+      const result = Array.isArray(data) ? data[0] : data;
 
       await addDealActivity(
         `${communicationChannel} Outcome Logged`,
@@ -1114,6 +1105,12 @@ async function fetchDealDocuments() {
           `Outcome: ${communicationOutcome}`,
           communicationSummary.trim()
             ? `Summary: ${communicationSummary.trim()}`
+            : null,
+          result?.resolved_existing
+            ? "Resolved previous pending communication action"
+            : "Standalone communication outcome logged",
+          result?.completed_task_id
+            ? "Linked follow-up task completed"
             : null,
         ]
           .filter(Boolean)
@@ -1123,18 +1120,31 @@ async function fetchDealDocuments() {
 
       await addLeadActivity(
         `${communicationChannel} Outcome Logged`,
-        `Deal #${deal.id} manual communication outcome: ${communicationOutcome}.`,
+        `Deal #${deal.id} manual communication outcome: ${communicationOutcome}. ${
+          result?.resolved_existing
+            ? "Previous pending communication action was resolved."
+            : "Standalone outcome logged."
+        } ${
+          result?.completed_task_id
+            ? "Linked follow-up task completed."
+            : ""
+        }`,
         "green"
       );
 
       await Promise.all([
         fetchCommunicationLogs(),
+        fetchDeal(),
         fetchDealActivities(),
       ]);
+
+      window.dispatchEvent(new CustomEvent("dealflow-task-updated"));
 
       setShowCommunicationOutcomeModal(false);
       setCommunicationOutcome("Sent");
       setCommunicationSummary("");
+      setCommunicationFollowUpRequired(false);
+      setCommunicationFollowUpDate("");
     } finally {
       setSavingCommunication(false);
     }

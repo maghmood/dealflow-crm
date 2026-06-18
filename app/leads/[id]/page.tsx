@@ -3309,43 +3309,29 @@ async function fetchAffordabilityAssessments() {
     setSavingCommunication(true);
 
     try {
-      const { data, error } = await supabase
-        .from("communication_logs")
-        .insert({
-          company_id: profile.company_id,
-          lead_id: lead.id,
-          deal_id: linkedDealSnapshot?.id || null,
-          finance_application_id: financeApplicationId,
-          channel: communicationChannel,
-          direction: "Inbound",
-          template_key: "manual_outcome",
-          subject:
+      const { data, error } = await supabase.rpc(
+        "resolve_manual_communication_outcome",
+        {
+          p_lead_id: lead.id,
+          p_channel: communicationChannel,
+          p_outcome: communicationOutcome,
+          p_summary: communicationSummary.trim() || null,
+          p_subject:
             communicationChannel === "Email"
               ? communicationSubject.trim() || null
               : null,
-          message_body: communicationMessage.trim() || null,
-          outcome: communicationOutcome,
-          summary: communicationSummary.trim() || null,
-          send_status: "Closed",
-          customer_name: lead.customer,
-          customer_phone: lead.phone,
-          customer_email: lead.email,
-          created_by_id: profile.id,
-          created_by_name:
-            profile.full_name || profile.email || "Unknown User",
-          sent_at: new Date().toISOString(),
-          resolved_at: new Date().toISOString(),
-        })
-        .select("*")
-        .single();
+          p_message_body: communicationMessage.trim() || null,
+          p_deal_id: linkedDealSnapshot?.id || null,
+          p_finance_application_id: financeApplicationId,
+        }
+      );
 
-      if (error || !data) {
-        alert(
-          "Could not save communication outcome: " +
-            (error?.message || "Unknown error")
-        );
+      if (error) {
+        alert("Could not save communication outcome: " + error.message);
         return;
       }
+
+      const result = Array.isArray(data) ? data[0] : data;
 
       await addActivity(
         `${communicationChannel} Reply / Outcome Logged`,
@@ -3354,17 +3340,26 @@ async function fetchAffordabilityAssessments() {
           communicationSummary.trim()
             ? `Summary: ${communicationSummary.trim()}`
             : null,
+          result?.resolved_existing
+            ? "Resolved previous pending communication action"
+            : "Standalone communication outcome logged",
+          result?.completed_task_id
+            ? "Linked follow-up task completed"
+            : null,
         ]
           .filter(Boolean)
           .join(" • "),
         "communication",
-        "blue"
+        result?.resolved_existing ? "green" : "blue"
       );
 
       await Promise.all([
         fetchCommunicationLogs(),
         fetchLead(),
+        fetchLeadTasks(),
       ]);
+
+      window.dispatchEvent(new CustomEvent("dealflow-task-updated"));
 
       setShowCommunicationOutcomeModal(false);
       setActiveCommunicationLog(null);
