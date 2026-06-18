@@ -267,6 +267,7 @@ const [uploadingDocument, setUploadingDocument] = useState(false);
 const [loading, setLoading] = useState(true);
 const [saving, setSaving] = useState(false);
 const [workflowSaving, setWorkflowSaving] = useState(false);
+const [submittingToFinance, setSubmittingToFinance] = useState(false);
 const [plannedDeliveryAt, setPlannedDeliveryAt] = useState("");
 
   const [stageDraft, setStageDraft] = useState("Draft");
@@ -690,6 +691,52 @@ async function uploadDealDocument(file: File) {
     await fetchDealActivities();
   }
 
+  async function submitDealToFinance() {
+    if (!deal?.lead_id || !profile?.company_id) return;
+
+    if (
+      deal.finance_status === "Submitted" ||
+      deal.finance_status === "Approved" ||
+      deal.selected_bank_offer_id
+    ) {
+      alert("This Deal has already been submitted to Finance.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Submit Deal #${deal.id} for ${deal.customer_name || "this customer"} to Finance?`
+    );
+
+    if (!confirmed) return;
+
+    setSubmittingToFinance(true);
+
+    const { data, error } = await supabase.rpc(
+      "submit_lead_to_finance",
+      { p_lead_id: deal.lead_id }
+    );
+
+    setSubmittingToFinance(false);
+
+    if (error) {
+      alert("Could not submit to Finance: " + error.message);
+      return;
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    await Promise.all([
+      fetchDeal(),
+      fetchDealActivities(),
+    ]);
+
+    alert(
+      result?.result_action === "already_exists"
+        ? "This customer was already submitted to Finance."
+        : "Deal submitted to Finance successfully."
+    );
+  }
+
   async function runDealWorkflow(
     functionName:
       | "start_deal_vehicle_preparation"
@@ -892,6 +939,40 @@ return (
             <p className="mt-1 text-sm text-slate-500">
               Move the selected vehicle through preparation, delivery readiness and customer handover.
             </p>
+
+            <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-bold text-orange-900">
+                    Finance Submission
+                  </p>
+                  <p className="mt-1 text-sm text-orange-700">
+                    Submit this Deal to Finance when the customer and Deal values are ready.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void submitDealToFinance()}
+                  disabled={
+                    submittingToFinance ||
+                    !deal.lead_id ||
+                    deal.finance_status === "Submitted" ||
+                    deal.finance_status === "Approved" ||
+                    Boolean(deal.selected_bank_offer_id)
+                  }
+                  className="rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submittingToFinance
+                    ? "Submitting..."
+                    : deal.finance_status === "Submitted" ||
+                      deal.finance_status === "Approved" ||
+                      deal.selected_bank_offer_id
+                    ? "Finance Submitted"
+                    : "Submit to Finance"}
+                </button>
+              </div>
+            </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button

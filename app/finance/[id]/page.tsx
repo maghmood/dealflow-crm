@@ -394,6 +394,10 @@ async function uploadDocument() {
     });
   }
 
+  if (documentType === "Bank Approval") {
+    window.dispatchEvent(new CustomEvent("dealflow-task-updated"));
+  }
+
   alert("Document uploaded successfully.");
 
   setSelectedFile(null);

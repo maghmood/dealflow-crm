@@ -279,6 +279,7 @@ export default function CustomerDetailPage() {
     useState(false);
 
   const [loading, setLoading] = useState(true);
+  const [submittingToFinance, setSubmittingToFinance] = useState(false);
   const [showEditModal, setShowEditModal] =
   useState(false);
 
@@ -768,6 +769,50 @@ const [editVehicle, setEditVehicle] =
     setFinanceApplication(data || null);
   }
 
+  async function submitCustomerToFinance() {
+    if (!customer || !profile?.company_id) return;
+
+    if (financeApplication) {
+      alert("This customer has already been submitted to Finance.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Submit ${customer.customer || "this customer"} to Finance?`
+    );
+
+    if (!confirmed) return;
+
+    setSubmittingToFinance(true);
+
+    const { data, error } = await supabase.rpc(
+      "submit_lead_to_finance",
+      { p_lead_id: customer.id }
+    );
+
+    setSubmittingToFinance(false);
+
+    if (error) {
+      alert("Could not submit to Finance: " + error.message);
+      return;
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    await Promise.all([
+      fetchCustomer(),
+      fetchDeals(),
+      fetchFinanceApplication(),
+      fetchActivities(),
+    ]);
+
+    alert(
+      result?.result_action === "already_exists"
+        ? "This customer was already submitted to Finance."
+        : "Customer submitted to Finance successfully."
+    );
+  }
+
   useEffect(() => {
     fetchCustomer();
     fetchDeals();
@@ -899,6 +944,22 @@ return (
   </button>
 </WriteAccessGuard>
             
+
+            <WriteAccessGuard>
+              <button
+                type="button"
+                onClick={() => void submitCustomerToFinance()}
+                disabled={submittingToFinance || Boolean(financeApplication)}
+                className="rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submittingToFinance
+                  ? "Submitting..."
+                  : financeApplication
+                  ? "Finance Submitted"
+                  : "Submit to Finance"}
+              </button>
+            </WriteAccessGuard>
+
             <Link
               href={`/leads/${customer.id}`}
               className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
