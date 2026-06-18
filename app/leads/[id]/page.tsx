@@ -755,6 +755,21 @@ const slightlyAboveBudget = vehicleMatches.filter(
     return cleaned;
   }
 
+  function shouldOpenPhoneDialler() {
+    if (typeof navigator === "undefined") return false;
+
+    const userAgent = navigator.userAgent || "";
+    const isMobileDevice =
+      /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(userAgent);
+
+    const hasCoarsePointer =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+
+    return isMobileDevice || hasCoarsePointer;
+  }
+
 async function startCustomerCall() {
   if (!lead || !profile?.company_id || !profile?.id) {
     alert("Lead or user details are missing.");
@@ -813,9 +828,23 @@ async function startCustomerCall() {
   setCallCommunicationLogId(data.id);
   setShowCallModal(true);
 
-  setTimeout(() => {
-    window.location.href = `tel:+${normalizedPhone}`;
-  }, 100);
+  if (shouldOpenPhoneDialler()) {
+    setTimeout(() => {
+      window.location.href = `tel:+${normalizedPhone}`;
+    }, 100);
+  } else {
+    try {
+      await navigator.clipboard.writeText(`+${normalizedPhone}`);
+
+      alert(
+        `Tracked call action created. The customer number +${normalizedPhone} has been copied. Use your phone or desktop softphone to call, then save the call outcome in DealFlow.`
+      );
+    } catch {
+      alert(
+        `Tracked call action created. Please call +${normalizedPhone} using your phone or desktop softphone, then save the call outcome in DealFlow.`
+      );
+    }
+  }
 
   await fetchCommunicationLogs();
 }
@@ -3177,7 +3206,7 @@ async function fetchAffordabilityAssessments() {
             p_priority: "Medium",
             p_due_date: new Date(communicationFollowUpDate).toISOString(),
             p_task_scope: "Sales",
-            p_task_reason: "COMMUNICATION_FOLLOW_UP",
+            p_task_reason: "CUSTOMER_FOLLOW_UP",
             p_related_record_type: "communication_log",
             p_related_record_id: activeCommunicationLog.id,
             p_use_dedupe: true,
