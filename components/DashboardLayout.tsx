@@ -14,6 +14,8 @@ type NotificationItem = {
   href: string;
   severity: "red" | "orange" | "blue" | "green";
   source: "task" | "communication";
+  taskId?: number;
+  taskReason?: string | null;
 };
 
 type Company = {
@@ -180,7 +182,26 @@ export default function DashboardLayout({
   } else {
     const now = new Date();
 
-    const taskRows = taskResult.data || [];
+    const taskRows = (taskResult.data || []).filter((task: any) => {
+      /*
+       * Finance users must only see Finance-owned work.
+       * Sales finance-offer tasks are for the Sales user only, even if older data
+       * accidentally assigned one to a Finance profile.
+       */
+      if (profile.role === "Finance") {
+        return (
+          task.task_scope === "Finance" &&
+          task.task_reason !== "FINANCE_OFFER_RESPONSE"
+        );
+      }
+
+      if (profile.role === "Sales") {
+        return task.task_scope !== "Finance";
+      }
+
+      return true;
+    });
+
     const taskLeadIds = Array.from(
       new Set(
         taskRows
@@ -265,6 +286,8 @@ export default function DashboardLayout({
               ? "red"
               : "orange",
           source: "task",
+          taskId: Number(task.id),
+          taskReason: task.task_reason || null,
         } satisfies NotificationItem;
       })
       .filter(Boolean) as NotificationItem[];
@@ -328,6 +351,47 @@ export default function DashboardLayout({
     await supabase.auth.signOut();
     setShowUserMenu(false);
     router.push("/login");
+  }
+
+  async function handleNotificationClick(notification: NotificationItem) {
+    setShowNotifications(false);
+
+    /*
+     * Sales finance-offer notifications are action prompts.
+     * Once the Sales user opens the notification, remove it from the bell
+     * by completing the underlying task. The Lead page still keeps the
+     * finance offer visible for follow-up.
+     */
+    if (
+      notification.source === "task" &&
+      notification.taskReason === "FINANCE_OFFER_RESPONSE" &&
+      notification.taskId &&
+      profile?.company_id &&
+      profile?.id
+    ) {
+      setNotifications((current) =>
+        current.filter((item) => item.id !== notification.id)
+      );
+
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          status: "Completed",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", notification.taskId)
+        .eq("company_id", profile.company_id)
+        .eq("assigned_user_id", profile.id);
+
+      if (error) {
+        console.error(
+          "Could not complete finance offer notification task:",
+          error.message
+        );
+      } else {
+        window.dispatchEvent(new CustomEvent("dealflow-task-updated"));
+      }
+    }
   }
 
   useEffect(() => {
@@ -804,7 +868,9 @@ if (!profile || profile.status !== "Active") {
                               <Link
                                 key={notification.id}
                                 href={notification.href}
-                                onClick={() => setShowNotifications(false)}
+                                onClick={() => {
+                                  void handleNotificationClick(notification);
+                                }}
                                 className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                               >
                                 <div className="flex items-start gap-3">
