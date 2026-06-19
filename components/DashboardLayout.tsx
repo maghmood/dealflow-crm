@@ -127,7 +127,7 @@ export default function DashboardLayout({
   let taskQuery = supabase
     .from("tasks")
     .select(
-      "id, title, due_date, status, lead_id, assigned_user_id"
+      "id, title, due_date, status, lead_id, assigned_user_id, task_scope, task_reason, related_record_type, related_record_id"
     )
     .eq("company_id", profile.company_id)
     .neq("status", "Completed")
@@ -231,16 +231,39 @@ export default function DashboardLayout({
 
         if (!isOverdue && !isDueToday) return null;
 
+        const isFinanceApplicationTask =
+          task.related_record_type === "finance_application" &&
+          task.related_record_id;
+
+        const isFinanceOfferTask =
+          task.related_record_type === "finance_bank_offer" &&
+          task.related_record_id;
+
         return {
           id: `task-${task.id}`,
-          title: isOverdue
-            ? "Overdue Task"
-            : "Task Due Today",
+          title:
+            task.task_reason === "FINANCE_APPLICATION_REVIEW" ||
+            task.task_reason === "FINANCE_OFFER_RESPONSE"
+              ? task.title
+              : isOverdue
+              ? "Overdue Task"
+              : "Task Due Today",
           message: task.lead_id
             ? `${taskCustomerMap.get(task.lead_id) || "Customer"} • ${task.title}`
             : `General Task • ${task.title}`,
-          href: `/tasks?taskId=${task.id}`,
-          severity: isOverdue ? "red" : "orange",
+          href: isFinanceApplicationTask
+            ? `/finance/${task.related_record_id}`
+            : isFinanceOfferTask && task.lead_id
+            ? `/leads/${task.lead_id}`
+            : `/tasks?taskId=${task.id}`,
+          severity:
+            task.task_reason === "FINANCE_APPLICATION_REVIEW"
+              ? "blue"
+              : task.task_reason === "FINANCE_OFFER_RESPONSE"
+              ? "green"
+              : isOverdue
+              ? "red"
+              : "orange",
           source: "task",
         } satisfies NotificationItem;
       })

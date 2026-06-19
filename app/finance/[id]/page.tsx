@@ -10,7 +10,7 @@ import { useAuth } from "@/components/AuthProvider";
 
 type FinanceDocument = {
   id: number;
-  finance_application_id: number;
+  finance_application_id: number | null;
   lead_id: number | null;
   document_name: string;
   document_type: string | null;
@@ -289,18 +289,43 @@ async function fetchFinanceNotes() {
   setFinanceNotesHistory(Array.isArray(data) ? data : []);
 }
 
-async function fetchFinanceDocuments() {
+async function fetchFinanceDocuments(
+  applicationOverride?: FinanceApplication | null,
+  linkedDealOverride?: LinkedDeal | null
+) {
+  if (!profile?.company_id) return;
+
+  const activeApplication = applicationOverride || application;
+  const activeDeal = linkedDealOverride || linkedDeal;
+
+  const filters = [`finance_application_id.eq.${financeId}`];
+
+  if (activeApplication?.lead_id) {
+    filters.push(`lead_id.eq.${activeApplication.lead_id}`);
+  }
+
+  if (activeDeal?.id) {
+    filters.push(`deal_id.eq.${activeDeal.id}`);
+  }
+
   const { data, error } = await supabase
     .from("finance_documents")
     .select("*")
-    .eq("finance_application_id", financeId)
-    .eq("company_id", profile?.company_id)
+    .eq("company_id", profile.company_id)
+    .or(filters.join(","))
     .order("created_at", { ascending: false });
 
   if (error) {
     console.error("Error loading finance documents:", error.message);
+    setFinanceDocuments([]);
   } else {
-    setFinanceDocuments(data || []);
+    const uniqueDocuments = new Map<number, FinanceDocument>();
+
+    ((data || []) as FinanceDocument[]).forEach((document) => {
+      uniqueDocuments.set(document.id, document);
+    });
+
+    setFinanceDocuments(Array.from(uniqueDocuments.values()));
   }
 }
 
@@ -402,7 +427,7 @@ async function uploadDocument() {
 
   setSelectedFile(null);
 
-  fetchFinanceDocuments();
+  await fetchFinanceDocuments(application, linkedDeal);
   fetchFinanceApplication();
 }
 
@@ -651,6 +676,8 @@ async function saveBankOffer() {
     fetchFinanceApplication(),
   ]);
 
+  window.dispatchEvent(new CustomEvent("dealflow-task-updated"));
+
   setSavingBankOffer(false);
   alert("Bank response saved successfully.");
 }
@@ -685,7 +712,7 @@ async function saveBankOffer() {
       .order("created_at", { ascending: false });
 
       await fetchFinanceNotes();
-      await fetchFinanceDocuments();
+      await fetchFinanceDocuments(data, null);
       await fetchBankOffers();
 
       if (activityError) {
@@ -1236,6 +1263,9 @@ return (
   <h2 className="text-xl font-bold text-slate-800">
     Finance Documents
   </h2>
+  <p className="mt-1 text-sm text-slate-500">
+    Includes documents uploaded from Sales on the linked Lead, plus documents uploaded directly in Finance.
+  </p>
 
   <div className="mt-5 space-y-4">
     <select
